@@ -709,11 +709,29 @@ def location_allowed(job: CanonicalJob) -> bool:
     return False
 
 def title_keyword_match(job: CanonicalJob):
+    """
+    For studio sources: skip keyword matching entirely — the source is already
+    targeted at VFX/animation studios so everything found is potentially relevant.
+    Just run the exclude filter to drop clearly wrong roles (senior, director etc).
+
+    For non-studio sources (industry boards, discovered etc): require a keyword
+    match to avoid noise from broad listings.
+    """
     hay = normalize_text(f"{job.title} {job.description_text or ''}")
+
+    # Always apply excludes regardless of source kind
+    if any(ex in hay for ex in get_excludes()):
+        return False, None
+
+    # Studio sources — trust the source, skip keyword requirement
+    if job.source_kind == "studio":
+        # Use first matching keyword as label if present, else use title
+        matched = next((kw for kw in get_keywords() if kw in hay), None)
+        return True, matched or normalize_text(job.title)[:40]
+
+    # Non-studio sources — require explicit keyword match
     matched = next((kw for kw in get_keywords() if kw in hay), None)
     if not matched:
-        return False, None
-    if any(ex in hay for ex in get_excludes()):
         return False, None
     return True, matched
 
