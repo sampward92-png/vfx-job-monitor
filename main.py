@@ -708,12 +708,12 @@ def title_keyword_match(job: CanonicalJob):
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
 def fetch_text(url: str) -> str:
-    r = requests.get(url, headers=HEADERS, timeout=30)
+    r = requests.get(url, headers=HEADERS, timeout=10)
     r.raise_for_status()
     return r.text
 
 def fetch_json(url: str):
-    r = requests.get(url, headers=HEADERS, timeout=30)
+    r = requests.get(url, headers=HEADERS, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -1231,7 +1231,32 @@ def handle_command(text: str) -> str:
                     seen_sources.add(source_key)
 
                     try:
-                        raw_jobs, discovered = fetch_source_jobs(source)
+                        # Hard 15s timeout per source — prevents one hung source
+                        # from blocking the entire scan queue
+                        result_box = [None, None]  # [jobs, discovered]
+                        fetch_exc  = [None]
+
+                        def _fetch():
+                            try:
+                                result_box[0], result_box[1] = fetch_source_jobs(source)
+                            except Exception as ex:
+                                fetch_exc[0] = ex
+
+                        t = threading.Thread(target=_fetch, daemon=True)
+                        t.start()
+                        t.join(timeout=15)
+
+                        if t.is_alive():
+                            # Source is hanging — skip it
+                            record_source_failure(source["name"], "hard timeout (>15s)", "timeout")
+                            source_log.append((source["name"], 0, 0, "hard timeout (>15s)"))
+                            time.sleep(0.5)
+                            continue
+
+                        if fetch_exc[0] is not None:
+                            raise fetch_exc[0]
+
+                        raw_jobs, discovered = result_box[0] or [], result_box[1] or []
                         record_source_success(source["name"], len(raw_jobs))
 
                         matched_this_source = 0
