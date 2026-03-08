@@ -29,6 +29,7 @@ HEADERS = {
 }
 
 DEFAULT_KEYWORDS = [
+    # Core production titles
     "production assistant",
     "production coordinator",
     "junior production coordinator",
@@ -36,12 +37,39 @@ DEFAULT_KEYWORDS = [
     "assistant producer",
     "junior producer",
     "production trainee",
+    "production intern",
+    "production runner",
     "studio runner",
     "runner",
     "studio assistant",
-    "production intern",
     "project coordinator",
     "project assistant",
+    "production manager",      # junior production manager
+    "production secretary",
+    "production administrator",
+    "production admin",
+    "post production assistant",
+    "post production coordinator",
+    "post coordinator",
+    "post assistant",
+    "ep assistant",
+    "executive assistant",     # exec assistant to EP etc
+    # Junior / entry signals used as standalone titles
+    "junior coordinator",
+    "junior assistant",
+    "graduate scheme",
+    "graduate programme",
+    "graduate program",
+    "trainee",
+    "apprentice",
+    "internship",
+    "intern",
+    "work experience",
+    "entry level",
+    "launchpad",               # Framestore Launchpad etc
+    "kickstart",
+    "talent scheme",
+    "emerging talent",
 ]
 
 DEFAULT_EXCLUDES = [
@@ -459,9 +487,9 @@ def init_db():
 
 
 def seed_defaults():
-    if not db_execute("SELECT keyword FROM keywords", fetch=True):
-        for kw in DEFAULT_KEYWORDS:
-            db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (kw,))
+    # Always ensure all default keywords are present — handles new additions on redeploy
+    for kw in DEFAULT_KEYWORDS:
+        db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (kw,))
 
     # Always ensure all default excludes are present — handles new additions
     # on redeploy without wiping any custom excludes the user has added
@@ -769,26 +797,16 @@ def location_allowed(job: CanonicalJob) -> bool:
 
 def title_keyword_match(job: CanonicalJob):
     """
-    For studio sources: skip keyword matching entirely — the source is already
-    targeted at VFX/animation studios so everything found is potentially relevant.
-    Just run the exclude filter to drop clearly wrong roles (senior, director etc).
-
-    For non-studio sources (industry boards, discovered etc): require a keyword
-    match to avoid noise from broad listings.
+    Require a keyword match for all sources.
+    Always apply excludes to drop non-production-track roles.
     """
     hay = normalize_text(f"{job.title} {job.description_text or ''}")
 
-    # Always apply excludes regardless of source kind
+    # Always apply excludes first
     if any(ex in hay for ex in get_excludes()):
         return False, None
 
-    # Studio sources — trust the source, skip keyword requirement
-    if job.source_kind == "studio":
-        # Use first matching keyword as label if present, else use title
-        matched = next((kw for kw in get_keywords() if kw in hay), None)
-        return True, matched or normalize_text(job.title)[:40]
-
-    # Non-studio sources — require explicit keyword match
+    # Require keyword match for all sources
     matched = next((kw for kw in get_keywords() if kw in hay), None)
     if not matched:
         return False, None
