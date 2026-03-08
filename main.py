@@ -819,6 +819,41 @@ def title_keyword_match(job: CanonicalJob):
     return True, matched
 
 
+def classify_rejection(job: CanonicalJob, threshold: float) -> str:
+    """
+    Debug-only helper for /scandebug.
+    Returns the first reason a job failed:
+      - excluded
+      - no_keyword
+      - location
+      - score
+      - passed
+    """
+    hay = normalize_text(f"{job.title} {job.description_text or ''}")
+
+    if any(ex in hay for ex in get_excludes()):
+        return "excluded"
+
+    matched = next((kw for kw in get_keywords() if kw in hay), None)
+    if not matched:
+        return "no_keyword"
+
+    if not location_allowed(job):
+        return "location"
+
+    total_score, _ = score_job(job)
+
+    blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
+    job.location_normalized = detect_location(blob, company=job.company) or None
+    if job.location_normalized == "Non-UK":
+        return "location"
+
+    if total_score <= 0 or total_score < threshold:
+        return "score"
+
+    return "passed"
+
+
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
 def fetch_text(url: str) -> str:
@@ -1337,42 +1372,53 @@ def handle_command(text: str) -> str:
                         except concurrent.futures.TimeoutError:
                             source = futures[future]
                             record_source_failure(source["name"], "timeout", "timeout")
-                            source_log.append((source["name"], 0, 0, "timeout"))
+                            source_log.append((source["name"], 0, 0, "timeout", {}))
                             continue
                         except Exception as e:
                             source = futures[future]
-                            source_log.append((source["name"], 0, 0, str(e)[:120]))
+                            source_log.append((source["name"], 0, 0, str(e)[:120], {}))
                             continue
 
                         if err:
-                            source_log.append((source["name"], 0, 0, err))
+                            source_log.append((source["name"], 0, 0, err, {}))
                             continue
 
                         matched_this_source = 0
+                        reason_counts = {
+                            "excluded": 0,
+                            "no_keyword": 0,
+                            "location": 0,
+                            "score": 0,
+                        }
+
                         for raw in raw_jobs:
                             job = normalise_to_canonical(raw, source)
+
+                            reason = classify_rejection(job, threshold)
+                            if reason != "passed":
+                                reason_counts[reason] += 1
+                                continue
+
                             ok, matched_keyword = title_keyword_match(job)
                             if not ok:
+                                reason_counts["no_keyword"] += 1
                                 continue
+
                             job.matched_keyword = matched_keyword
-                            if not location_allowed(job):
-                                continue
                             total_score, breakdown = score_job(job)
-                            job.score           = total_score
+                            job.score = total_score
                             job.score_breakdown = breakdown
+
                             blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
                             job.location_normalized = detect_location(blob, company=job.company) or None
-                            if job.location_normalized == "Non-UK" or total_score <= 0:
-                                continue
-                            if total_score < threshold:
-                                continue
+
                             with lock:
                                 created, unique_key = upsert_job(job)
                                 seen_keys.add(unique_key)
                                 all_matched.append(job)
                             matched_this_source += 1
 
-                        source_log.append((source["name"], len(raw_jobs), matched_this_source, None))
+                        source_log.append((source["name"], len(raw_jobs), matched_this_source, None, reason_counts))
 
                 expire_stale_jobs(seen_keys)
                 all_matched.sort(key=lambda j: j.score or 0, reverse=True)
@@ -1380,13 +1426,18 @@ def handle_command(text: str) -> str:
                 # ── Debug: per-source breakdown ──
                 if debug:
                     lines = ["📊 Per-source results:"]
-                    for name, raw_c, match_c, err in source_log:
+                    for name, raw_c, match_c, err, reason_counts in source_log:
                         if err:
                             lines.append(f"  ❌ {name}: ERROR — {err}")
                         elif raw_c == 0:
                             lines.append(f"  🟡 {name}: 0 jobs found")
                         elif match_c == 0:
                             lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed filters")
+                            reason_summary = ", ".join(
+                                f"{k}={v}" for k, v in (reason_counts or {}).items() if v > 0
+                            )
+                            if reason_summary:
+                                lines.append(f"      rejections: {reason_summary}")
                         else:
                             lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
                     # Split into chunks to avoid Telegram 4096 char limit
@@ -1403,8 +1454,8 @@ def handle_command(text: str) -> str:
                         time.sleep(0.3)
 
                 # ── Summary ──
-                errors   = sum(1 for _, _, _, e in source_log if e)
-                zero_src = sum(1 for _, r, _, e in source_log if r == 0 and not e)
+                errors   = sum(1 for _, _, _, e, _ in source_log if e)
+                zero_src = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
                 send_telegram_message(
                     f"✅ Scan complete\n"
                     f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} returned zero jobs\n"
