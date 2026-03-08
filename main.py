@@ -409,7 +409,7 @@ def seed_defaults():
 
     if not get_state("location_mode"): set_state("location_mode", "london")
     if not get_state("paused"):        set_state("paused", "0")
-    if not get_state("quality_mode"):  set_state("quality_mode", "normal")
+    if not get_state("quality_mode"):  set_state("quality_mode", "off")
 
     existing = db_execute("SELECT COUNT(*) FROM sources", fetch=True)
     if not existing or existing[0][0] == 0:
@@ -568,8 +568,8 @@ def remove_keyword(keyword):
     if kw: db_execute("DELETE FROM keywords WHERE keyword=?", (kw,))
 
 def quality_threshold():
-    mode = get_state("quality_mode", "normal").lower()
-    return 75 if mode == "strict" else (0 if mode == "off" else 45)
+    mode = get_state("quality_mode", "off").lower()
+    return 75 if mode == "strict" else (45 if mode == "normal" else 0)
 
 
 # ── Scoring engine ────────────────────────────────────────────────────────────
