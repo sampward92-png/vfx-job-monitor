@@ -44,7 +44,7 @@ def check_jobs():
 def monitor():
     while True:
         check_jobs()
-        time.sleep(21600)
+        time.sleep(600)
 
 app = Flask(__name__)
 
