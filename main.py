@@ -204,8 +204,11 @@ def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
     location = clean_text(raw.get("location", "") or "")
     body     = clean_text(raw.get("body", "") or "")
 
-    can_url    = canonicalize_url(url)
-    fingerprint = CanonicalJob.build_fingerprint(company, title, location)
+    can_url = canonicalize_url(url)
+    # Use normalised location for fingerprint so "London", "London UK", "London / Hybrid"
+    # all resolve to the same bucket and don't create duplicate entries.
+    norm_loc    = detect_location(f"{location} {body}", company=company)
+    fingerprint = CanonicalJob.build_fingerprint(company, title, norm_loc)
 
     return CanonicalJob(
         title=title,
@@ -382,6 +385,13 @@ def init_db():
                 cur.execute(f"ALTER TABLE source_health ADD COLUMN {col} {definition}")
             except sqlite3.OperationalError:
                 pass
+
+    # Indexes — safe to run repeatedly, match current query patterns
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_unique_key ON jobs(unique_key)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs(job_status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score      ON jobs(score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company    ON jobs(company)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen)")
 
     conn.commit()
     conn.close()
