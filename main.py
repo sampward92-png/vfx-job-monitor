@@ -22,7 +22,7 @@ APP_TZ = timezone.utc
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/3.0; +https://railway.app)"
+    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/4.0; +https://railway.app)"
 }
 
 DEFAULT_KEYWORDS = [
@@ -58,6 +58,16 @@ UK_STUDIO_COMPANIES = {
     "Cinesite",
     "Blue Zoo",
     "Jellyfish Pictures",
+    "ILM",
+    "Milk",
+    "BlueBolt",
+    "Outpost",
+    "MPC",
+    "The Mill",
+    "Absolute",
+    "Coffee & TV",
+    "Envy",
+    "Lola",
 }
 
 LONDON_TERMS = [
@@ -75,6 +85,8 @@ LONDON_TERMS = [
     "london uk",
     "london / hybrid",
     "london/hybrid",
+    "clerkenwell",
+    "london bridge",
 ]
 
 UK_TERMS = [
@@ -85,6 +97,9 @@ UK_TERMS = [
     "uk remote",
     "hybrid uk",
     "remote, uk",
+    "bournemouth",
+    "manchester",
+    "bristol",
 ]
 
 NON_UK_TERMS = [
@@ -106,17 +121,10 @@ NON_UK_TERMS = [
     "munich",
     "france",
     "paris",
+    "barcelona",
 ]
 
 SOURCES = [
-    {
-        "name": "Framestore Recruitee",
-        "company": "Framestore",
-        "kind": "studio",
-        "priority": 1,
-        "type": "html",
-        "url": "https://framestore.recruitee.com/",
-    },
     {
         "name": "Framestore Careers",
         "company": "Framestore",
@@ -126,20 +134,20 @@ SOURCES = [
         "url": "https://www.framestore.com/careers",
     },
     {
-        "name": "Nexus Studios Workable",
-        "company": "Nexus Studios",
+        "name": "Framestore Recruitee",
+        "company": "Framestore",
         "kind": "studio",
         "priority": 1,
         "type": "html",
-        "url": "https://apply.workable.com/nexusstudios/",
+        "url": "https://framestore.recruitee.com/",
     },
     {
-        "name": "Nexus Studios Teamtailor",
-        "company": "Nexus Studios",
+        "name": "DNEG Open Positions",
+        "company": "DNEG",
         "kind": "studio",
         "priority": 1,
         "type": "html",
-        "url": "https://nexusstudios.teamtailor.com/",
+        "url": "https://www.dneg.com/join-us/open-positions",
     },
     {
         "name": "DNEG Jobvite",
@@ -148,14 +156,6 @@ SOURCES = [
         "priority": 1,
         "type": "html",
         "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs",
-    },
-    {
-        "name": "DNEG Careers",
-        "company": "DNEG",
-        "kind": "studio",
-        "priority": 1,
-        "type": "html",
-        "url": "https://www.dneg.com/careers/open-positions",
     },
     {
         "name": "Cinesite Job Vacancies",
@@ -179,13 +179,113 @@ SOURCES = [
         "kind": "studio",
         "priority": 1,
         "type": "html",
-        "url": "https://apply.workable.com/jellyfish-pictures-ltd/?lng=en",
+        "url": "https://apply.workable.com/jellyfish-pictures-ltd/",
     },
+    {
+        "name": "Nexus Studios Workable",
+        "company": "Nexus Studios",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://apply.workable.com/nexusstudios/",
+    },
+    {
+        "name": "ILM Careers",
+        "company": "ILM",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://www.ilm.com/careers/",
+    },
+    {
+        "name": "Milk Careers",
+        "company": "Milk",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://www.milk-vfx.com/careers/",
+    },
+    {
+        "name": "BlueBolt Hiring",
+        "company": "BlueBolt",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://www.blue-bolt.com/hiring",
+    },
+    {
+        "name": "Outpost Careers",
+        "company": "Outpost",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://careers.outpost-vfx.com/",
+    },
+    {
+        "name": "Outpost Careers Alt",
+        "company": "Outpost",
+        "kind": "studio",
+        "priority": 1,
+        "type": "html",
+        "url": "https://www.outpost-vfx.com/careers/",
+    },
+
+    # Lower-priority studio pages that may still expose roles or links
+    {
+        "name": "MPC Careers",
+        "company": "MPC",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://www.moving-picture.com/careers",
+    },
+    {
+        "name": "The Mill Careers",
+        "company": "The Mill",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://www.themill.com/careers",
+    },
+    {
+        "name": "Absolute Careers",
+        "company": "Absolute",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://absolute.tv/careers",
+    },
+    {
+        "name": "Coffee & TV Careers",
+        "company": "Coffee & TV",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://www.coffeeand.tv/careers",
+    },
+    {
+        "name": "Envy Careers",
+        "company": "Envy",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://www.envypost.co.uk/careers",
+    },
+    {
+        "name": "Lola Post Careers",
+        "company": "Lola",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://www.lola-post.com/careers",
+    },
+
+    # Industry board
     {
         "name": "ScreenSkills Jobs",
         "company": "ScreenSkills",
         "kind": "industry_board",
-        "priority": 2,
+        "priority": 3,
         "type": "html",
         "url": "https://www.screenskills.com/jobs/",
     },
@@ -446,6 +546,7 @@ def location_allowed(job):
         "assistant producer",
         "production trainee",
         "production intern",
+        "studio assistant",
     ])
 
     if mode == "london":
@@ -539,7 +640,9 @@ def score_job(job):
     if priority == 1:
         score += 10
     elif priority == 2:
-        score += 4
+        score += 6
+    elif priority == 3:
+        score += 2
 
     preferred_companies = [
         "framestore",
@@ -548,6 +651,10 @@ def score_job(job):
         "cinesite",
         "blue zoo",
         "jellyfish pictures",
+        "ilm",
+        "milk",
+        "bluebolt",
+        "outpost",
     ]
     if company in preferred_companies:
         score += 8
@@ -970,7 +1077,7 @@ def start_background_threads():
     _started = True
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
-    send_telegram_message("Studio monitor upgraded successfully.")
+    send_telegram_message("Expanded source monitor deployed successfully.")
 
 
 start_background_threads()
