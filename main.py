@@ -22,7 +22,7 @@ APP_TZ = timezone.utc
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/4.0; +https://railway.app)"
+    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/5.0; +https://railway.app)"
 }
 
 DEFAULT_KEYWORDS = [
@@ -68,6 +68,7 @@ UK_STUDIO_COMPANIES = {
     "Coffee & TV",
     "Envy",
     "Lola",
+    "ScreenSkills",
 }
 
 LONDON_TERMS = [
@@ -122,8 +123,11 @@ NON_UK_TERMS = [
     "france",
     "paris",
     "barcelona",
+    "toronto",
 ]
 
+# Base studio and industry sources.
+# HTML sources are used both for direct scraping and ATS auto-discovery.
 SOURCES = [
     {
         "name": "Framestore Careers",
@@ -154,7 +158,7 @@ SOURCES = [
         "company": "DNEG",
         "kind": "studio",
         "priority": 1,
-        "type": "html",
+        "type": "jobvite",
         "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs",
     },
     {
@@ -178,7 +182,7 @@ SOURCES = [
         "company": "Jellyfish Pictures",
         "kind": "studio",
         "priority": 1,
-        "type": "html",
+        "type": "workable",
         "url": "https://apply.workable.com/jellyfish-pictures-ltd/",
     },
     {
@@ -186,8 +190,16 @@ SOURCES = [
         "company": "Nexus Studios",
         "kind": "studio",
         "priority": 1,
-        "type": "html",
+        "type": "workable",
         "url": "https://apply.workable.com/nexusstudios/",
+    },
+    {
+        "name": "Nexus Studios Teamtailor",
+        "company": "Nexus Studios",
+        "kind": "studio",
+        "priority": 1,
+        "type": "teamtailor",
+        "url": "https://nexusstudios.teamtailor.com/jobs",
     },
     {
         "name": "ILM Careers",
@@ -221,16 +233,6 @@ SOURCES = [
         "type": "html",
         "url": "https://careers.outpost-vfx.com/",
     },
-    {
-        "name": "Outpost Careers Alt",
-        "company": "Outpost",
-        "kind": "studio",
-        "priority": 1,
-        "type": "html",
-        "url": "https://www.outpost-vfx.com/careers/",
-    },
-
-    # Lower-priority studio pages that may still expose roles or links
     {
         "name": "MPC Careers",
         "company": "MPC",
@@ -279,8 +281,6 @@ SOURCES = [
         "type": "html",
         "url": "https://www.lola-post.com/careers",
     },
-
-    # Industry board
     {
         "name": "ScreenSkills Jobs",
         "company": "ScreenSkills",
@@ -290,6 +290,17 @@ SOURCES = [
         "url": "https://www.screenskills.com/jobs/",
     },
 ]
+
+ATS_PATTERNS = {
+    "greenhouse": ["boards.greenhouse.io", "job-boards.greenhouse.io"],
+    "lever": ["jobs.lever.co", "api.lever.co"],
+    "workable": ["apply.workable.com"],
+    "ashby": ["jobs.ashbyhq.com"],
+    "jobvite": ["jobs.jobvite.com"],
+    "teamtailor": ["teamtailor.com"],
+    "smartrecruiters": ["smartrecruiters.com"],
+    "workday": ["myworkdayjobs.com", ".wd1.myworkdayjobs.com", ".wd3.myworkdayjobs.com"],
+}
 
 _started = False
 
@@ -313,8 +324,7 @@ def canonicalize_url(url: str) -> str:
 
 def clean_text(text: str) -> str:
     text = text or ""
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def normalize_text(text: str) -> str:
@@ -402,13 +412,11 @@ def init_db():
 
 
 def seed_defaults():
-    existing_keywords = db_execute("SELECT keyword FROM keywords", fetch=True)
-    if not existing_keywords:
+    if not db_execute("SELECT keyword FROM keywords", fetch=True):
         for kw in DEFAULT_KEYWORDS:
             db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (kw,))
 
-    existing_excludes = db_execute("SELECT phrase FROM excludes", fetch=True)
-    if not existing_excludes:
+    if not db_execute("SELECT phrase FROM excludes", fetch=True):
         for phrase in DEFAULT_EXCLUDES:
             db_execute("INSERT OR IGNORE INTO excludes (phrase) VALUES (?)", (phrase,))
 
@@ -418,12 +426,12 @@ def seed_defaults():
     if not get_state("paused"):
         set_state("paused", "0")
 
+    if not get_state("quality_mode"):
+        set_state("quality_mode", "normal")
+
 
 def set_state(key, value):
-    db_execute(
-        "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
-        (key, str(value)),
-    )
+    db_execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", (key, str(value)))
 
 
 def get_state(key, default=""):
@@ -432,29 +440,36 @@ def get_state(key, default=""):
 
 
 def get_keywords():
-    rows = db_execute("SELECT keyword FROM keywords ORDER BY keyword ASC", fetch=True)
-    return [row[0] for row in rows]
+    return [row[0] for row in db_execute("SELECT keyword FROM keywords ORDER BY keyword ASC", fetch=True)]
 
 
 def get_excludes():
-    rows = db_execute("SELECT phrase FROM excludes ORDER BY phrase ASC", fetch=True)
-    return [row[0] for row in rows]
+    return [row[0] for row in db_execute("SELECT phrase FROM excludes ORDER BY phrase ASC", fetch=True)]
 
 
 def add_keyword(keyword):
     keyword = normalize_text(keyword)
-    if not keyword:
-        return False
-    db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (keyword,))
-    return True
+    if keyword:
+        db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (keyword,))
+        return True
+    return False
 
 
 def remove_keyword(keyword):
     keyword = normalize_text(keyword)
-    if not keyword:
-        return False
-    db_execute("DELETE FROM keywords WHERE keyword = ?", (keyword,))
-    return True
+    if keyword:
+        db_execute("DELETE FROM keywords WHERE keyword = ?", (keyword,))
+        return True
+    return False
+
+
+def quality_threshold():
+    mode = get_state("quality_mode", "normal").lower()
+    if mode == "strict":
+        return 75
+    if mode == "off":
+        return 0
+    return 45
 
 
 def send_telegram_message(text, chat_id=None):
@@ -465,22 +480,26 @@ def send_telegram_message(text, chat_id=None):
     if not target_chat_id:
         return
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": target_chat_id,
-        "text": text[:4000],
-        "disable_web_page_preview": True,
-    }
-
     try:
-        requests.post(url, json=payload, timeout=20)
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": target_chat_id,
+                "text": text[:4000],
+                "disable_web_page_preview": True,
+            },
+            timeout=20,
+        )
     except Exception:
         pass
 
 
 def telegram_api(method, payload=None):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
-    response = requests.post(url, json=payload or {}, timeout=30)
+    response = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}",
+        json=payload or {},
+        timeout=30,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -501,31 +520,32 @@ def fetch_text(url):
     return response.text
 
 
+def fetch_json(url):
+    response = requests.get(url, headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
 def detect_location(text, company=""):
     hay = normalize_text(text)
 
     if any(term in hay for term in NON_UK_TERMS):
         return "Non-UK"
-
     if any(term in hay for term in LONDON_TERMS):
         return "London"
-
     if any(term in hay for term in UK_TERMS):
         return "UK"
-
     if company in UK_STUDIO_COMPANIES:
         return "Unknown-UK-Studio"
-
     return ""
 
 
 def location_allowed(job):
     mode = get_state("location_mode", "london").lower()
-
     if mode == "off":
         return True
 
-    text_blob = " ".join([
+    blob = " ".join([
         job.get("title", ""),
         job.get("location", ""),
         job.get("body", ""),
@@ -533,7 +553,7 @@ def location_allowed(job):
         job.get("source_name", ""),
     ])
 
-    loc = detect_location(text_blob, company=job.get("company", ""))
+    loc = detect_location(blob, company=job.get("company", ""))
 
     if loc == "Non-UK":
         return False
@@ -550,29 +570,19 @@ def location_allowed(job):
     ])
 
     if mode == "london":
-        if loc == "London":
-            return True
-        if loc == "Unknown-UK-Studio" and strong_title:
-            return True
-        return False
+        return loc == "London" or (loc == "Unknown-UK-Studio" and strong_title)
 
     if mode == "uk":
-        if loc in {"London", "UK"}:
-            return True
-        if loc == "Unknown-UK-Studio" and strong_title:
-            return True
-        return False
+        return loc in {"London", "UK"} or (loc == "Unknown-UK-Studio" and strong_title)
 
     return True
 
 
 def title_keyword_match(title, body):
-    keywords = get_keywords()
-    excludes = get_excludes()
     hay = normalize_text(f"{title} {body}")
-
     matched_keyword = None
-    for kw in keywords:
+
+    for kw in get_keywords():
         if kw in hay:
             matched_keyword = kw
             break
@@ -580,7 +590,7 @@ def title_keyword_match(title, body):
     if not matched_keyword:
         return False, None
 
-    for phrase in excludes:
+    for phrase in get_excludes():
         if phrase in hay:
             return False, None
 
@@ -613,16 +623,14 @@ def score_job(job):
         if phrase in title:
             score += points
 
-    junior_terms = ["junior", "graduate", "assistant", "trainee", "intern", "entry"]
-    for term in junior_terms:
+    for term in ["junior", "graduate", "assistant", "trainee", "intern", "entry"]:
         if term in blob:
             score += 6
 
-    loc = detect_location(" ".join([
-        job.get("title", ""),
-        job.get("location", ""),
-        job.get("body", ""),
-    ]), company=job.get("company", ""))
+    loc = detect_location(
+        " ".join([job.get("title", ""), job.get("location", ""), job.get("body", "")]),
+        company=job.get("company", ""),
+    )
 
     if loc == "London":
         score += 30
@@ -659,8 +667,7 @@ def score_job(job):
     if company in preferred_companies:
         score += 8
 
-    negative_terms = ["senior", "lead", "director", "supervisor", "executive producer", "principal"]
-    for term in negative_terms:
+    for term in ["senior", "lead", "director", "supervisor", "executive producer", "principal"]:
         if term in blob:
             score -= 40
 
@@ -671,12 +678,7 @@ def build_unique_key(job):
     canonical_url = canonicalize_url(job.get("url", ""))
     if canonical_url:
         return f"url::{canonical_url}"
-
-    return "fp::" + short_hash(
-        job.get("title", ""),
-        job.get("company", ""),
-        job.get("location", ""),
-    )
+    return "fp::" + short_hash(job.get("title", ""), job.get("company", ""), job.get("location", ""))
 
 
 def upsert_job(job):
@@ -684,13 +686,13 @@ def upsert_job(job):
     canonical_url = canonicalize_url(job.get("url", ""))
     now = now_str()
 
-    rows = db_execute(
+    existing = db_execute(
         "SELECT id, source_priority FROM jobs WHERE unique_key = ?",
         (unique_key,),
         fetch=True,
     )
 
-    if not rows:
+    if not existing:
         db_execute("""
             INSERT INTO jobs (
                 unique_key, canonical_url, title, company, location, url,
@@ -716,9 +718,8 @@ def upsert_job(job):
         ))
         created = True
     else:
-        _, current_priority = rows[0]
+        _, current_priority = existing[0]
         created = False
-
         replace_primary = int(job.get("source_priority", 9)) < int(current_priority)
 
         if replace_primary:
@@ -745,11 +746,10 @@ def upsert_job(job):
                 unique_key,
             ))
         else:
-            db_execute("""
-                UPDATE jobs
-                SET last_seen = ?, score = ?
-                WHERE unique_key = ?
-            """, (now, int(job.get("score", 0)), unique_key))
+            db_execute(
+                "UPDATE jobs SET last_seen = ?, score = ? WHERE unique_key = ?",
+                (now, int(job.get("score", 0)), unique_key),
+            )
 
     db_execute("""
         INSERT INTO job_sources (unique_key, source_name, source_type, url, seen_at)
@@ -765,68 +765,247 @@ def upsert_job(job):
     return created
 
 
-def extract_jobs_from_html(source):
+def identify_ats_type(url):
+    low = url.lower()
+    for ats_type, patterns in ATS_PATTERNS.items():
+        if any(pattern in low for pattern in patterns):
+            return ats_type
+    return None
+
+
+def discover_ats_sources_from_html(source, html):
+    soup = BeautifulSoup(html, "html.parser")
+    discovered = []
+    seen = set()
+
+    for a in soup.find_all("a", href=True):
+        href = urljoin(source["url"], a["href"].strip())
+        ats_type = identify_ats_type(href)
+        if not ats_type:
+            continue
+
+        key = f"{ats_type}|{canonicalize_url(href)}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        discovered.append({
+            "name": f"{source['company']} discovered {ats_type}",
+            "company": source["company"],
+            "kind": source["kind"],
+            "priority": source["priority"],
+            "type": ats_type,
+            "url": href,
+        })
+
+    return discovered
+
+
+def generic_extract_jobs_from_soup(source, soup):
     jobs = []
+    seen = set()
+
+    for a in soup.find_all("a", href=True):
+        href = a.get("href", "").strip()
+        title = clean_text(a.get_text(" ", strip=True))
+        if not href or not title:
+            continue
+
+        full_url = urljoin(source["url"], href)
+        context = clean_text(a.parent.get_text(" ", strip=True)) if a.parent else title
+        context_blob = f"{title} {context} {full_url}"
+
+        looks_job_like = any(term in normalize_text(context_blob) for term in [
+            "job", "career", "vacancy", "opening", "role",
+            "producer", "production", "runner", "assistant", "coordinator", "intern"
+        ])
+
+        if not looks_job_like:
+            continue
+
+        dedupe_key = short_hash(full_url, title)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        jobs.append({
+            "title": title,
+            "company": source["company"],
+            "location": detect_location(context_blob, company=source["company"]),
+            "url": full_url,
+            "body": context,
+            "source_name": source["name"],
+            "source_kind": source["kind"],
+            "source_priority": source["priority"],
+            "source_type": source["type"],
+        })
+
+    return jobs
+
+
+def parse_html(source):
     try:
         html = fetch_text(source["url"])
         soup = BeautifulSoup(html, "html.parser")
-        seen = set()
-
-        for a in soup.find_all("a", href=True):
-            href = a.get("href", "").strip()
-            title = clean_text(a.get_text(" ", strip=True))
-            if not href or not title:
-                continue
-
-            full_url = urljoin(source["url"], href)
-            context = clean_text(a.parent.get_text(" ", strip=True)) if a.parent else title
-            context_blob = f"{title} {context} {full_url}"
-
-            looks_job_like = any(term in normalize_text(context_blob) for term in [
-                "job", "career", "vacancy", "opening", "role",
-                "producer", "production", "runner", "assistant", "coordinator", "intern"
-            ])
-
-            if not looks_job_like:
-                continue
-
-            dedupe_key = short_hash(full_url, title)
-            if dedupe_key in seen:
-                continue
-            seen.add(dedupe_key)
-
-            jobs.append({
-                "title": title,
-                "company": source["company"],
-                "location": detect_location(context_blob, company=source["company"]),
-                "url": full_url,
-                "body": context,
-                "source_name": source["name"],
-                "source_kind": source["kind"],
-                "source_priority": source["priority"],
-                "source_type": source["type"],
-            })
+        jobs = generic_extract_jobs_from_soup(source, soup)
+        discovered = discover_ats_sources_from_html(source, html)
+        return jobs, discovered
     except Exception:
-        return []
-    return jobs
+        return [], []
+
+
+def parse_greenhouse(source):
+    jobs = []
+    discovered = []
+
+    try:
+        url = source["url"]
+        slug = None
+
+        m = re.search(r"boards\.greenhouse\.io/([^/?#]+)", url)
+        if m:
+            slug = m.group(1)
+        else:
+            m = re.search(r"job-boards\.greenhouse\.io/([^/?#]+)", url)
+            if m:
+                slug = m.group(1)
+
+        if slug:
+            data = fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
+            for item in data.get("jobs", []):
+                jobs.append({
+                    "title": clean_text(item.get("title", "")),
+                    "company": source["company"],
+                    "location": clean_text((item.get("location") or {}).get("name", "")),
+                    "url": item.get("absolute_url", ""),
+                    "body": json.dumps(item, ensure_ascii=False),
+                    "source_name": source["name"],
+                    "source_kind": source["kind"],
+                    "source_priority": source["priority"],
+                    "source_type": source["type"],
+                })
+            return jobs, discovered
+    except Exception:
+        pass
+
+    return parse_html(source)
+
+
+def parse_lever(source):
+    jobs = []
+    discovered = []
+
+    try:
+        url = source["url"]
+        company_slug = None
+
+        m = re.search(r"jobs\.lever\.co/([^/?#]+)", url)
+        if m:
+            company_slug = m.group(1)
+        else:
+            m = re.search(r"api\.lever\.co/v0/postings/([^/?#]+)", url)
+            if m:
+                company_slug = m.group(1)
+
+        if company_slug:
+            data = fetch_json(f"https://api.lever.co/v0/postings/{company_slug}?mode=json")
+            for item in data:
+                categories = item.get("categories") or {}
+                jobs.append({
+                    "title": clean_text(item.get("text", "")),
+                    "company": source["company"],
+                    "location": clean_text(categories.get("location", "")),
+                    "url": item.get("hostedUrl", ""),
+                    "body": json.dumps(item, ensure_ascii=False),
+                    "source_name": source["name"],
+                    "source_kind": source["kind"],
+                    "source_priority": source["priority"],
+                    "source_type": source["type"],
+                })
+            return jobs, discovered
+    except Exception:
+        pass
+
+    return parse_html(source)
+
+
+def parse_workable(source):
+    return parse_html(source)
+
+
+def parse_ashby(source):
+    return parse_html(source)
+
+
+def parse_jobvite(source):
+    return parse_html(source)
+
+
+def parse_teamtailor(source):
+    return parse_html(source)
+
+
+def parse_smartrecruiters(source):
+    return parse_html(source)
+
+
+def parse_workday(source):
+    return parse_html(source)
+
+
+def fetch_source_jobs(source):
+    source_type = source["type"]
+
+    if source_type == "greenhouse":
+        return parse_greenhouse(source)
+    if source_type == "lever":
+        return parse_lever(source)
+    if source_type == "workable":
+        return parse_workable(source)
+    if source_type == "ashby":
+        return parse_ashby(source)
+    if source_type == "jobvite":
+        return parse_jobvite(source)
+    if source_type == "teamtailor":
+        return parse_teamtailor(source)
+    if source_type == "smartrecruiters":
+        return parse_smartrecruiters(source)
+    if source_type == "workday":
+        return parse_workday(source)
+
+    return parse_html(source)
 
 
 def collect_jobs():
-    jobs = []
-    for source in SOURCES:
-        jobs.extend(extract_jobs_from_html(source))
-    return jobs
+    all_jobs = []
+    queued = list(SOURCES)
+    seen_sources = set()
+
+    while queued:
+        source = queued.pop(0)
+        source_key = f"{source.get('type')}|{canonicalize_url(source.get('url', ''))}|{source.get('company')}"
+        if source_key in seen_sources:
+            continue
+        seen_sources.add(source_key)
+
+        jobs, discovered = fetch_source_jobs(source)
+        all_jobs.extend(jobs)
+
+        for ds in discovered:
+            ds_key = f"{ds.get('type')}|{canonicalize_url(ds.get('url', ''))}|{ds.get('company')}"
+            if ds_key not in seen_sources:
+                queued.append(ds)
+
+    return all_jobs
 
 
 def filter_and_store_jobs():
     raw_jobs = collect_jobs()
     new_jobs = []
+    threshold = quality_threshold()
 
     for job in raw_jobs:
-        title = job.get("title", "")
-        body = job.get("body", "")
-
-        ok, matched_keyword = title_keyword_match(title, body)
+        ok, matched_keyword = title_keyword_match(job.get("title", ""), job.get("body", ""))
         if not ok:
             continue
 
@@ -837,11 +1016,10 @@ def filter_and_store_jobs():
 
         job["score"] = score_job(job)
 
-        if job["score"] < 40:
+        if job["score"] < threshold:
             continue
 
-        created = upsert_job(job)
-        if created:
+        if upsert_job(job):
             new_jobs.append(job)
 
     return sorted(new_jobs, key=lambda x: x.get("score", 0), reverse=True)
@@ -855,20 +1033,24 @@ def format_job_rows(rows):
     for idx, row in enumerate(rows, start=1):
         title, company, location, url, first_seen, score = row
         loc_part = f" | {location}" if location else ""
-        lines.append(f"{idx}. {title} — {company}{loc_part}\nScore: {score}\n{url}\nFound: {first_seen}\n")
+        lines.append(
+            f"{idx}. {title} — {company}{loc_part}\n"
+            f"Score: {score}\n"
+            f"{url}\n"
+            f"Found: {first_seen}\n"
+        )
     return "\n".join(lines[:10])
 
 
 def latest_rows(hours=24, limit=10):
-    cutoff = utc_now() - timedelta(hours=hours)
-    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S UTC")
+    cutoff = (utc_now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S UTC")
     return db_execute("""
         SELECT title, company, location, url, first_seen, score
         FROM jobs
         WHERE first_seen >= ?
         ORDER BY score DESC, id DESC
         LIMIT ?
-    """, (cutoff_str, limit), fetch=True)
+    """, (cutoff, limit), fetch=True)
 
 
 def handle_command(text):
@@ -890,6 +1072,7 @@ def handle_command(text):
             "/companies\n"
             "/sources\n"
             "/setlocation london|uk|off\n"
+            "/quality strict|normal|off\n"
             "/pause\n"
             "/resume"
         )
@@ -903,6 +1086,8 @@ def handle_command(text):
             f"New matches on last check: {get_state('last_match_count', '0')}\n"
             f"Saved jobs: {total}\n"
             f"Location mode: {get_state('location_mode', 'london')}\n"
+            f"Quality mode: {get_state('quality_mode', 'normal')}\n"
+            f"Score threshold: {quality_threshold()}\n"
             f"Check interval: {CHECK_INTERVAL_SECONDS} seconds"
         )
 
@@ -971,9 +1156,7 @@ def handle_command(text):
         return "Companies with saved jobs:\n" + "\n".join(f"- {company} — {count}" for company, count in rows)
 
     if lower == "/sources":
-        lines = []
-        for src in SOURCES:
-            lines.append(f"- {src['company']} | {src['type']} | {src['kind']}")
+        lines = [f"- {src['company']} | {src['type']} | {src['kind']}" for src in SOURCES]
         return "Source list:\n" + "\n".join(lines)
 
     if lower.startswith("/setlocation "):
@@ -982,6 +1165,13 @@ def handle_command(text):
             return "Use /setlocation london or /setlocation uk or /setlocation off"
         set_state("location_mode", mode)
         return f"Location filter set to: {mode}"
+
+    if lower.startswith("/quality "):
+        mode = lower.replace("/quality ", "", 1).strip()
+        if mode not in {"strict", "normal", "off"}:
+            return "Use /quality strict or /quality normal or /quality off"
+        set_state("quality_mode", mode)
+        return f"Quality mode set to: {mode} (threshold {quality_threshold()})"
 
     if lower == "/pause":
         set_state("paused", "1")
@@ -999,20 +1189,28 @@ def send_new_job_alerts(jobs):
         return
 
     high_priority = [job for job in jobs if job.get("score", 0) >= 75]
-    normal_priority = [job for job in jobs if 40 <= job.get("score", 0) < 75]
+    normal_priority = [job for job in jobs if quality_threshold() <= job.get("score", 0) < 75]
 
     if high_priority:
         lines = ["HIGH PRIORITY JOBS FOUND:\n"]
         for job in high_priority[:6]:
             loc = f" | {job.get('location', '')}" if job.get("location") else ""
-            lines.append(f"{job['title']} — {job['company']}{loc}\nScore: {job['score']}\n{job['url']}\n")
+            lines.append(
+                f"{job['title']} — {job['company']}{loc}\n"
+                f"Score: {job['score']}\n"
+                f"{job['url']}\n"
+            )
         send_telegram_message("\n".join(lines))
 
-    if normal_priority:
+    if normal_priority and get_state("quality_mode", "normal").lower() != "strict":
         lines = ["New matching jobs found:\n"]
         for job in normal_priority[:6]:
             loc = f" | {job.get('location', '')}" if job.get("location") else ""
-            lines.append(f"{job['title']} — {job['company']}{loc}\nScore: {job['score']}\n{job['url']}\n")
+            lines.append(
+                f"{job['title']} — {job['company']}{loc}\n"
+                f"Score: {job['score']}\n"
+                f"{job['url']}\n"
+            )
         send_telegram_message("\n".join(lines))
 
 
@@ -1059,7 +1257,7 @@ def monitor_loop():
 
 @app.route("/")
 def home():
-    return "VFX studio monitor running", 200
+    return "ATS hunter monitor running", 200
 
 
 @app.route("/health")
@@ -1077,7 +1275,7 @@ def start_background_threads():
     _started = True
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
-    send_telegram_message("Expanded source monitor deployed successfully.")
+    send_telegram_message("ATS hunter version deployed successfully.")
 
 
 start_background_threads()
