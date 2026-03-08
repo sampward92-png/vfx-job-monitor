@@ -1,6 +1,5 @@
 import os
 import time
-import json
 import sqlite3
 import threading
 from datetime import datetime
@@ -8,12 +7,13 @@ from datetime import datetime
 import requests
 from flask import Flask
 
-PORT = int(os.environ.get("PORT", 8080))
+PORT = int(os.environ.get("PORT", "8080"))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL_SECONDS", "600"))
 
 app = Flask(__name__)
+DB_PATH = "jobs.db"
 
 KEYWORDS = [
     "production assistant",
@@ -34,13 +34,12 @@ URLS = [
     "https://api.lever.co/v0/postings/nexusstudios",
 ]
 
-DB_PATH = "jobs.db"
-
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
@@ -49,24 +48,24 @@ def init_db():
             source TEXT,
             found_at TEXT
         )
-    """)
-    cur.execute("""
+        """
+    )
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS state (
             key TEXT PRIMARY KEY,
             value TEXT
         )
-    """)
+        """
+    )
     conn.commit()
     conn.close()
 
 
-def db_execute(query, params=(), fetch=False, many=False):
+def db_execute(query, params=(), fetch=False):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    if many:
-        cur.executemany(query, params)
-    else:
-        cur.execute(query, params)
+    cur.execute(query, params)
     rows = cur.fetchall() if fetch else None
     conn.commit()
     conn.close()
@@ -76,7 +75,7 @@ def db_execute(query, params=(), fetch=False, many=False):
 def set_state(key, value):
     db_execute(
         "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
-        (key, value)
+        (key, value),
     )
 
 
@@ -84,16 +83,26 @@ def get_state(key, default=""):
     rows = db_execute(
         "SELECT value FROM state WHERE key = ?",
         (key,),
-        fetch=True
+        fetch=True,
     )
     return rows[0][0] if rows else default
 
 
-def send_telegram_message(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+def send_telegram_message(text, chat_id=None):
+    if not TELEGRAM_BOT_TOKEN:
         return
+
+    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID).strip()
+    if not target_chat_id:
+        return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "disable_web_page_preview": True}
+    payload = {
+        "chat_id": target_chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+
     try:
         requests.post(url, json=payload, timeout=20)
     except Exception:
@@ -122,12 +131,14 @@ def parse_greenhouse_jobs(url):
     try:
         data = requests.get(url, timeout=30).json()
         for job in data.get("jobs", []):
-            jobs.append({
-                "title": job.get("title", ""),
-                "company": "Framestore",
-                "url": job.get("absolute_url", ""),
-                "source": url,
-            })
+            jobs.append(
+                {
+                    "title": job.get("title", ""),
+                    "company": "Framestore",
+                    "url": job.get("absolute_url", ""),
+                    "source": url,
+                }
+            )
     except Exception:
         pass
     return jobs
@@ -138,12 +149,14 @@ def parse_lever_jobs(url):
     try:
         data = requests.get(url, timeout=30).json()
         for job in data:
-            jobs.append({
-                "title": job.get("text", ""),
-                "company": "Nexus Studios",
-                "url": job.get("hostedUrl", ""),
-                "source": url,
-            })
+            jobs.append(
+                {
+                    "title": job.get("text", ""),
+                    "company": "Nexus Studios",
+                    "url": job.get("hostedUrl", ""),
+                    "source": url,
+                }
+            )
     except Exception:
         pass
     return jobs
@@ -165,11 +178,11 @@ def matches_keywords(title):
 
 
 def save_job(job):
-    now = datetime.utcnow().isoformat()
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     try:
         db_execute(
             "INSERT INTO jobs (title, company, url, source, found_at) VALUES (?, ?, ?, ?, ?)",
-            (job["title"], job["company"], job["url"], job["source"], now)
+            (job["title"], job["company"], job["url"], job["source"], now),
         )
         return True
     except Exception:
@@ -185,8 +198,7 @@ def check_jobs():
             continue
         if not matches_keywords(job["title"]):
             continue
-        inserted = save_job(job)
-        if inserted:
+        if save_job(job):
             new_jobs.append(job)
 
     if new_jobs:
@@ -226,12 +238,12 @@ def handle_command(text):
     if text == "/jobs":
         rows = db_execute(
             "SELECT title, company, url, found_at FROM jobs ORDER BY id DESC LIMIT 10",
-            fetch=True
+            fetch=True,
         )
         return format_jobs(rows)
 
     if text.startswith("/search "):
-        term = text.replace("/search ", "", 1).strip()
+        term = text.replace("/search ", "", 1).strip().lower()
         rows = db_execute(
             """
             SELECT title, company, url, found_at
@@ -240,8 +252,8 @@ def handle_command(text):
             ORDER BY id DESC
             LIMIT 10
             """,
-            (f"%{term.lower()}%", f"%{term.lower()}%"),
-            fetch=True
+            (f"%{term}%", f"%{term}%"),
+            fetch=True,
         )
         if not rows:
             return f'No saved jobs found for "{term}".'
@@ -263,7 +275,7 @@ def handle_command(text):
     if text == "/keywords":
         return "Tracked keywords:\n" + "\n".join(f"- {k}" for k in KEYWORDS)
 
-    return 'Unknown command. Send /help'
+    return "Unknown command. Send /help"
 
 
 def command_loop():
@@ -278,15 +290,13 @@ def command_loop():
                 chat_id = str(chat.get("id", ""))
                 text = message.get("text", "")
 
-                if TELEGRAM_CHAT_ID and chat_id != TELEGRAM_CHAT_ID:
-                    continue
-
                 if text.startswith("/"):
                     reply = handle_command(text)
                     if reply:
-                        send_telegram_message(reply)
+                        send_telegram_message(reply, chat_id=chat_id)
         except Exception:
             pass
+
         time.sleep(3)
 
 
@@ -296,6 +306,7 @@ def monitor_loop():
             check_jobs()
         except Exception:
             pass
+
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
@@ -313,6 +324,7 @@ init_db()
 
 _started = False
 
+
 def start_background_threads():
     global _started
     if _started:
@@ -321,5 +333,6 @@ def start_background_threads():
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
     send_telegram_message("Bot started successfully.")
+
 
 start_background_threads()
