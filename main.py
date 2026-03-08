@@ -22,7 +22,7 @@ APP_TZ = timezone.utc
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/2.0; +https://railway.app)"
+    "User-Agent": "Mozilla/5.0 (compatible; VFXJobMonitor/3.0; +https://railway.app)"
 }
 
 DEFAULT_KEYWORDS = [
@@ -59,6 +59,54 @@ UK_STUDIO_COMPANIES = {
     "Blue Zoo",
     "Jellyfish Pictures",
 }
+
+LONDON_TERMS = [
+    "london",
+    "greater london",
+    "central london",
+    "east london",
+    "west london",
+    "shoreditch",
+    "soho",
+    "camden",
+    "king's cross",
+    "kings cross",
+    "london, uk",
+    "london uk",
+    "london / hybrid",
+    "london/hybrid",
+]
+
+UK_TERMS = [
+    "uk",
+    "united kingdom",
+    "england",
+    "remote uk",
+    "uk remote",
+    "hybrid uk",
+    "remote, uk",
+]
+
+NON_UK_TERMS = [
+    "usa",
+    "united states",
+    "new york",
+    "los angeles",
+    "california",
+    "canada",
+    "montreal",
+    "vancouver",
+    "sydney",
+    "australia",
+    "melbourne",
+    "mumbai",
+    "india",
+    "singapore",
+    "berlin",
+    "munich",
+    "france",
+    "paris",
+]
 
 SOURCES = [
     {
@@ -141,12 +189,6 @@ SOURCES = [
         "type": "html",
         "url": "https://www.screenskills.com/jobs/",
     },
-
-    # Adapters below are ready for future source additions:
-    # {"name": "Example Greenhouse", "company": "Example", "kind": "studio", "priority": 1, "type": "greenhouse", "slug": "example"},
-    # {"name": "Example Lever", "company": "Example", "kind": "studio", "priority": 1, "type": "lever", "company_slug": "example"},
-    # {"name": "Example SmartRecruiters", "company": "Example", "kind": "studio", "priority": 1, "type": "smartrecruiters", "company_id": "Example"},
-    # {"name": "Example Workday", "company": "Example", "kind": "studio", "priority": 1, "type": "workday", "api_url": "https://example.wd1.myworkdayjobs.com/wday/cxs/example/careers/jobs"},
 ]
 
 _started = False
@@ -218,6 +260,7 @@ def init_db():
             first_seen TEXT,
             last_seen TEXT,
             matched_keyword TEXT,
+            score INTEGER DEFAULT 0,
             raw_blob TEXT
         )
     """)
@@ -270,7 +313,7 @@ def seed_defaults():
             db_execute("INSERT OR IGNORE INTO excludes (phrase) VALUES (?)", (phrase,))
 
     if not get_state("location_mode"):
-        set_state("location_mode", "uk")
+        set_state("location_mode", "london")
 
     if not get_state("paused"):
         set_state("paused", "0")
@@ -358,29 +401,17 @@ def fetch_text(url):
     return response.text
 
 
-def fetch_json(url, method="GET", payload=None):
-    if method.upper() == "POST":
-        response = requests.post(url, headers=HEADERS, json=payload or {}, timeout=30)
-    else:
-        response = requests.get(url, headers=HEADERS, timeout=30)
-    response.raise_for_status()
-    return response.json()
-
-
 def detect_location(text, company=""):
     hay = normalize_text(text)
-    london_terms = ["london", "greater london", "shoreditch", "soho", "london/hybrid", "london / hybrid"]
-    uk_terms = ["uk", "united kingdom", "england", "remote uk", "hybrid remote", "remote, uk", "london"]
-    us_terms = ["new york", "los angeles", "california", "united states", "usa", "chicago", "canada", "montreal", "vancouver", "sydney", "mumbai", "melbourne"]
 
-    if any(term in hay for term in london_terms):
+    if any(term in hay for term in NON_UK_TERMS):
+        return "Non-UK"
+
+    if any(term in hay for term in LONDON_TERMS):
         return "London"
 
-    if any(term in hay for term in uk_terms):
+    if any(term in hay for term in UK_TERMS):
         return "UK"
-
-    if any(term in hay for term in us_terms):
-        return "Non-UK"
 
     if company in UK_STUDIO_COMPANIES:
         return "Unknown-UK-Studio"
@@ -389,7 +420,8 @@ def detect_location(text, company=""):
 
 
 def location_allowed(job):
-    mode = get_state("location_mode", "uk").lower()
+    mode = get_state("location_mode", "london").lower()
+
     if mode == "off":
         return True
 
@@ -403,11 +435,32 @@ def location_allowed(job):
 
     loc = detect_location(text_blob, company=job.get("company", ""))
 
+    if loc == "Non-UK":
+        return False
+
+    strong_title = any(term in normalize_text(job.get("title", "")) for term in [
+        "production assistant",
+        "production coordinator",
+        "junior production coordinator",
+        "graduate producer",
+        "assistant producer",
+        "production trainee",
+        "production intern",
+    ])
+
     if mode == "london":
-        return loc in {"London", "Unknown-UK-Studio"}
+        if loc == "London":
+            return True
+        if loc == "Unknown-UK-Studio" and strong_title:
+            return True
+        return False
 
     if mode == "uk":
-        return loc in {"London", "UK", "Unknown-UK-Studio"}
+        if loc in {"London", "UK"}:
+            return True
+        if loc == "Unknown-UK-Studio" and strong_title:
+            return True
+        return False
 
     return True
 
@@ -433,6 +486,80 @@ def title_keyword_match(title, body):
     return True, matched_keyword
 
 
+def score_job(job):
+    score = 0
+    title = normalize_text(job.get("title", ""))
+    body = normalize_text(job.get("body", ""))
+    company = normalize_text(job.get("company", ""))
+    blob = f"{title} {body}"
+
+    exact_title_boosts = {
+        "production assistant": 35,
+        "production coordinator": 32,
+        "junior production coordinator": 38,
+        "graduate producer": 40,
+        "assistant producer": 30,
+        "production trainee": 34,
+        "production intern": 28,
+        "studio assistant": 24,
+        "studio runner": 22,
+        "runner": 14,
+        "project coordinator": 20,
+        "project assistant": 18,
+    }
+
+    for phrase, points in exact_title_boosts.items():
+        if phrase in title:
+            score += points
+
+    junior_terms = ["junior", "graduate", "assistant", "trainee", "intern", "entry"]
+    for term in junior_terms:
+        if term in blob:
+            score += 6
+
+    loc = detect_location(" ".join([
+        job.get("title", ""),
+        job.get("location", ""),
+        job.get("body", ""),
+    ]), company=job.get("company", ""))
+
+    if loc == "London":
+        score += 30
+    elif loc == "UK":
+        score += 18
+    elif loc == "Unknown-UK-Studio":
+        score += 10
+    elif loc == "Non-UK":
+        score -= 100
+
+    if job.get("source_kind") == "studio":
+        score += 12
+
+    priority = int(job.get("source_priority", 9))
+    if priority == 1:
+        score += 10
+    elif priority == 2:
+        score += 4
+
+    preferred_companies = [
+        "framestore",
+        "nexus studios",
+        "dneg",
+        "cinesite",
+        "blue zoo",
+        "jellyfish pictures",
+    ]
+    if company in preferred_companies:
+        score += 8
+
+    negative_terms = ["senior", "lead", "director", "supervisor", "executive producer", "principal"]
+    for term in negative_terms:
+        if term in blob:
+            score -= 40
+
+    return max(score, 0)
+
+
 def build_unique_key(job):
     canonical_url = canonicalize_url(job.get("url", ""))
     if canonical_url:
@@ -451,7 +578,7 @@ def upsert_job(job):
     now = now_str()
 
     rows = db_execute(
-        "SELECT id, source_priority, source_name FROM jobs WHERE unique_key = ?",
+        "SELECT id, source_priority FROM jobs WHERE unique_key = ?",
         (unique_key,),
         fetch=True,
     )
@@ -461,8 +588,8 @@ def upsert_job(job):
             INSERT INTO jobs (
                 unique_key, canonical_url, title, company, location, url,
                 source_name, source_kind, source_priority, source_type,
-                first_seen, last_seen, matched_keyword, raw_blob
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                first_seen, last_seen, matched_keyword, score, raw_blob
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             unique_key,
             canonical_url,
@@ -477,11 +604,12 @@ def upsert_job(job):
             now,
             now,
             job.get("matched_keyword", ""),
-            json.dumps(job, ensure_ascii=False)[:2000],
+            int(job.get("score", 0)),
+            json.dumps(job, ensure_ascii=False)[:3000],
         ))
         created = True
     else:
-        job_id, current_priority, current_source = rows[0]
+        _, current_priority = rows[0]
         created = False
 
         replace_primary = int(job.get("source_priority", 9)) < int(current_priority)
@@ -491,7 +619,7 @@ def upsert_job(job):
                 UPDATE jobs
                 SET canonical_url = ?, title = ?, company = ?, location = ?, url = ?,
                     source_name = ?, source_kind = ?, source_priority = ?, source_type = ?,
-                    last_seen = ?, matched_keyword = ?, raw_blob = ?
+                    last_seen = ?, matched_keyword = ?, score = ?, raw_blob = ?
                 WHERE unique_key = ?
             """, (
                 canonical_url,
@@ -505,15 +633,16 @@ def upsert_job(job):
                 job.get("source_type", ""),
                 now,
                 job.get("matched_keyword", ""),
-                json.dumps(job, ensure_ascii=False)[:2000],
+                int(job.get("score", 0)),
+                json.dumps(job, ensure_ascii=False)[:3000],
                 unique_key,
             ))
         else:
             db_execute("""
                 UPDATE jobs
-                SET last_seen = ?
+                SET last_seen = ?, score = ?
                 WHERE unique_key = ?
-            """, (now, unique_key))
+            """, (now, int(job.get("score", 0)), unique_key))
 
     db_execute("""
         INSERT INTO job_sources (unique_key, source_name, source_type, url, seen_at)
@@ -575,117 +704,10 @@ def extract_jobs_from_html(source):
     return jobs
 
 
-def parse_greenhouse(source):
-    jobs = []
-    try:
-        url = f"https://boards-api.greenhouse.io/v1/boards/{source['slug']}/jobs"
-        data = fetch_json(url)
-        for item in data.get("jobs", []):
-            location = (item.get("location") or {}).get("name", "")
-            jobs.append({
-                "title": clean_text(item.get("title", "")),
-                "company": source["company"],
-                "location": location,
-                "url": item.get("absolute_url", ""),
-                "body": json.dumps(item, ensure_ascii=False),
-                "source_name": source["name"],
-                "source_kind": source["kind"],
-                "source_priority": source["priority"],
-                "source_type": source["type"],
-            })
-    except Exception:
-        return []
-    return jobs
-
-
-def parse_lever(source):
-    jobs = []
-    try:
-        url = f"https://api.lever.co/v0/postings/{source['company_slug']}?mode=json"
-        data = fetch_json(url)
-        for item in data:
-            categories = item.get("categories") or {}
-            location = categories.get("location", "")
-            jobs.append({
-                "title": clean_text(item.get("text", "")),
-                "company": source["company"],
-                "location": location,
-                "url": item.get("hostedUrl", ""),
-                "body": json.dumps(item, ensure_ascii=False),
-                "source_name": source["name"],
-                "source_kind": source["kind"],
-                "source_priority": source["priority"],
-                "source_type": source["type"],
-            })
-    except Exception:
-        return []
-    return jobs
-
-
-def parse_smartrecruiters(source):
-    jobs = []
-    try:
-        url = f"https://api.smartrecruiters.com/v1/companies/{source['company_id']}/postings"
-        data = fetch_json(url)
-        for item in data.get("content", []):
-            jobs.append({
-                "title": clean_text(item.get("name", "")),
-                "company": source["company"],
-                "location": clean_text((item.get("location") or {}).get("city", "")),
-                "url": item.get("ref", ""),
-                "body": json.dumps(item, ensure_ascii=False),
-                "source_name": source["name"],
-                "source_kind": source["kind"],
-                "source_priority": source["priority"],
-                "source_type": source["type"],
-            })
-    except Exception:
-        return []
-    return jobs
-
-
-def parse_workday(source):
-    jobs = []
-    try:
-        data = fetch_json(source["api_url"], method="POST", payload={"limit": 20, "offset": 0, "searchText": ""})
-        for item in data.get("jobPostings", []) or data.get("jobs", []):
-            title = clean_text(item.get("title", "") or item.get("bulletFields", [""])[0])
-            location = clean_text(item.get("locationsText", "") or item.get("location", ""))
-            external_path = item.get("externalPath", "")
-            url = source.get("base_url", "").rstrip("/") + external_path if external_path and source.get("base_url") else external_path
-            jobs.append({
-                "title": title,
-                "company": source["company"],
-                "location": location,
-                "url": url,
-                "body": json.dumps(item, ensure_ascii=False),
-                "source_name": source["name"],
-                "source_kind": source["kind"],
-                "source_priority": source["priority"],
-                "source_type": source["type"],
-            })
-    except Exception:
-        return []
-    return jobs
-
-
-def fetch_source_jobs(source):
-    source_type = source["type"]
-    if source_type == "greenhouse":
-        return parse_greenhouse(source)
-    if source_type == "lever":
-        return parse_lever(source)
-    if source_type == "smartrecruiters":
-        return parse_smartrecruiters(source)
-    if source_type == "workday":
-        return parse_workday(source)
-    return extract_jobs_from_html(source)
-
-
 def collect_jobs():
     jobs = []
     for source in SOURCES:
-        jobs.extend(fetch_source_jobs(source))
+        jobs.extend(extract_jobs_from_html(source))
     return jobs
 
 
@@ -696,6 +718,7 @@ def filter_and_store_jobs():
     for job in raw_jobs:
         title = job.get("title", "")
         body = job.get("body", "")
+
         ok, matched_keyword = title_keyword_match(title, body)
         if not ok:
             continue
@@ -705,11 +728,16 @@ def filter_and_store_jobs():
         if not location_allowed(job):
             continue
 
+        job["score"] = score_job(job)
+
+        if job["score"] < 40:
+            continue
+
         created = upsert_job(job)
         if created:
             new_jobs.append(job)
 
-    return new_jobs
+    return sorted(new_jobs, key=lambda x: x.get("score", 0), reverse=True)
 
 
 def format_job_rows(rows):
@@ -718,9 +746,9 @@ def format_job_rows(rows):
 
     lines = []
     for idx, row in enumerate(rows, start=1):
-        title, company, location, url, first_seen = row
+        title, company, location, url, first_seen, score = row
         loc_part = f" | {location}" if location else ""
-        lines.append(f"{idx}. {title} — {company}{loc_part}\n{url}\nFound: {first_seen}\n")
+        lines.append(f"{idx}. {title} — {company}{loc_part}\nScore: {score}\n{url}\nFound: {first_seen}\n")
     return "\n".join(lines[:10])
 
 
@@ -728,10 +756,10 @@ def latest_rows(hours=24, limit=10):
     cutoff = utc_now() - timedelta(hours=hours)
     cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S UTC")
     return db_execute("""
-        SELECT title, company, location, url, first_seen
+        SELECT title, company, location, url, first_seen, score
         FROM jobs
         WHERE first_seen >= ?
-        ORDER BY id DESC
+        ORDER BY score DESC, id DESC
         LIMIT ?
     """, (cutoff_str, limit), fetch=True)
 
@@ -747,6 +775,7 @@ def handle_command(text):
             "/status\n"
             "/jobs\n"
             "/latest\n"
+            "/highpriority\n"
             "/search <term>\n"
             "/keywords\n"
             "/addkeyword <term>\n"
@@ -766,15 +795,15 @@ def handle_command(text):
             f"Last checked: {get_state('last_checked', 'Not checked yet')}\n"
             f"New matches on last check: {get_state('last_match_count', '0')}\n"
             f"Saved jobs: {total}\n"
-            f"Location mode: {get_state('location_mode', 'uk')}\n"
+            f"Location mode: {get_state('location_mode', 'london')}\n"
             f"Check interval: {CHECK_INTERVAL_SECONDS} seconds"
         )
 
     if lower == "/jobs":
         rows = db_execute("""
-            SELECT title, company, location, url, first_seen
+            SELECT title, company, location, url, first_seen, score
             FROM jobs
-            ORDER BY id DESC
+            ORDER BY score DESC, id DESC
             LIMIT 10
         """, fetch=True)
         return format_job_rows(rows)
@@ -782,13 +811,23 @@ def handle_command(text):
     if lower == "/latest":
         return format_job_rows(latest_rows(hours=24, limit=10))
 
+    if lower == "/highpriority":
+        rows = db_execute("""
+            SELECT title, company, location, url, first_seen, score
+            FROM jobs
+            WHERE score >= 75
+            ORDER BY score DESC, id DESC
+            LIMIT 10
+        """, fetch=True)
+        return format_job_rows(rows)
+
     if lower.startswith("/search "):
         term = lower.replace("/search ", "", 1).strip()
         rows = db_execute("""
-            SELECT title, company, location, url, first_seen
+            SELECT title, company, location, url, first_seen, score
             FROM jobs
             WHERE lower(title) LIKE ? OR lower(company) LIKE ? OR lower(location) LIKE ?
-            ORDER BY id DESC
+            ORDER BY score DESC, id DESC
             LIMIT 10
         """, (f"%{term}%", f"%{term}%", f"%{term}%"), fetch=True)
         if not rows:
@@ -813,8 +852,16 @@ def handle_command(text):
         return f'Removed keyword: "{normalize_text(kw)}"'
 
     if lower == "/companies":
-        companies = sorted({src["company"] for src in SOURCES})
-        return "Studios / sources monitored:\n" + "\n".join(f"- {c}" for c in companies)
+        rows = db_execute("""
+            SELECT company, COUNT(*)
+            FROM jobs
+            GROUP BY company
+            ORDER BY COUNT(*) DESC, company ASC
+        """, fetch=True)
+        if not rows:
+            companies = sorted({src["company"] for src in SOURCES})
+            return "Studios / sources monitored:\n" + "\n".join(f"- {c}" for c in companies)
+        return "Companies with saved jobs:\n" + "\n".join(f"- {company} — {count}" for company, count in rows)
 
     if lower == "/sources":
         lines = []
@@ -843,11 +890,23 @@ def handle_command(text):
 def send_new_job_alerts(jobs):
     if not jobs:
         return
-    lines = ["New matching jobs found:\n"]
-    for job in jobs[:8]:
-        loc = f" | {job.get('location', '')}" if job.get("location") else ""
-        lines.append(f"{job['title']} — {job['company']}{loc}\n{job['url']}\n")
-    send_telegram_message("\n".join(lines))
+
+    high_priority = [job for job in jobs if job.get("score", 0) >= 75]
+    normal_priority = [job for job in jobs if 40 <= job.get("score", 0) < 75]
+
+    if high_priority:
+        lines = ["HIGH PRIORITY JOBS FOUND:\n"]
+        for job in high_priority[:6]:
+            loc = f" | {job.get('location', '')}" if job.get("location") else ""
+            lines.append(f"{job['title']} — {job['company']}{loc}\nScore: {job['score']}\n{job['url']}\n")
+        send_telegram_message("\n".join(lines))
+
+    if normal_priority:
+        lines = ["New matching jobs found:\n"]
+        for job in normal_priority[:6]:
+            loc = f" | {job.get('location', '')}" if job.get("location") else ""
+            lines.append(f"{job['title']} — {job['company']}{loc}\nScore: {job['score']}\n{job['url']}\n")
+        send_telegram_message("\n".join(lines))
 
 
 def command_loop():
@@ -911,7 +970,7 @@ def start_background_threads():
     _started = True
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
-    send_telegram_message("Studio monitor started successfully.")
+    send_telegram_message("Studio monitor upgraded successfully.")
 
 
 start_background_threads()
