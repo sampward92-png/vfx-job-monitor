@@ -5,6 +5,7 @@ import json
 import sqlite3
 import hashlib
 import threading
+import concurrent.futures
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -921,91 +922,62 @@ def upsert_job(job: CanonicalJob) -> tuple[bool, str]:
 
 def collect_and_store_jobs(force: bool = False) -> list:
     """
-    Run a full scrape across all active sources.
+    Run a full scrape across all active sources in parallel.
 
-    force=False (default, scheduler): only return jobs that are genuinely new
-    (not previously seen in the DB). This is normal operation.
-
-    force=True (/scan command): return ALL jobs that pass keyword/location/score
-    filters, including ones already in the DB. Used so the user can surface
-    roles that exist right now but were never alerted on.
+    force=False (default, scheduler): only return genuinely new jobs.
+    force=True (/scan): return all jobs passing filters, including existing ones.
     """
-    queued       = get_active_sources()
-    seen_sources = set()
-    all_matched  = []   # every job passing filters this run
-    seen_keys    = set()
-    threshold    = quality_threshold()
+    sources   = get_active_sources()
+    threshold = quality_threshold()
+    all_matched = []
+    seen_keys   = set()
+    lock        = threading.Lock()
 
-    while queued:
-        source     = queued.pop(0)
-        source_key = f"{source.get('type')}|{canonicalize_url(source.get('url',''))}|{source.get('company')}"
-        if source_key in seen_sources:
-            continue
-        seen_sources.add(source_key)
-
-        event_type = "http_error"
+    def _scrape_one(source):
         try:
             raw_jobs, discovered = fetch_source_jobs(source)
             event_type = "success_nonzero" if raw_jobs else "success_zero"
             record_source_success(source["name"], len(raw_jobs))
-
-            for raw in raw_jobs:
-                # Normalise to CanonicalJob
-                job = normalise_to_canonical(raw, source)
-
-                # Keyword match
-                ok, matched_keyword = title_keyword_match(job)
-                if not ok:
-                    continue
-                job.matched_keyword = matched_keyword
-
-                # Location filter
-                if not location_allowed(job):
-                    continue
-
-                # Score
-                total_score, breakdown = score_job(job)
-                job.score           = total_score
-                job.score_breakdown = breakdown
-
-                # Location normalisation
-                blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
-                job.location_normalized = detect_location(blob, company=job.company) or None
-
-                if total_score < threshold:
-                    continue
-
-                created, unique_key = upsert_job(job)
-                seen_keys.add(unique_key)
-                if created or force:
-                    all_matched.append(job)
-
-            for ds in discovered:
-                dk = f"{ds.get('type')}|{canonicalize_url(ds.get('url',''))}|{ds.get('company')}"
-                if dk not in seen_sources:
-                    queued.append(ds)
-
-        except RuntimeError as e:
-            err_str = str(e)
-            if "timeout" in err_str:
-                event_type = "timeout"
-            elif "http_error" in err_str:
-                event_type = "http_error"
-            else:
-                event_type = "parse_error"
-            fails, status = record_source_failure(source["name"], err_str, event_type)
-            if fails == 3:
-                send_telegram_message(f"⚠️ Source degraded: {source['name']}\nType: {event_type}")
-            elif fails == 7:
-                send_telegram_message(f"🔴 Source dead: {source['name']}\nType: {event_type}")
+            return source, raw_jobs, None
         except Exception as e:
-            fails, status = record_source_failure(source["name"], str(e), "parse_error")
+            err = str(e)
+            event_type = "timeout" if "timeout" in err.lower() else "parse_error"
+            fails, _ = record_source_failure(source["name"], err[:200], event_type)
             if fails == 3:
                 send_telegram_message(f"⚠️ Source degraded: {source['name']}")
             elif fails == 7:
                 send_telegram_message(f"🔴 Source dead: {source['name']}")
+            return source, [], err
 
-        time.sleep(1.5)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_scrape_one, s): s for s in sources}
+        for future in concurrent.futures.as_completed(futures, timeout=60):
+            try:
+                source, raw_jobs, err = future.result()
+            except Exception:
+                continue
+            if err or not raw_jobs:
+                continue
+            for raw in raw_jobs:
+                job = normalise_to_canonical(raw, source)
+                ok, matched_keyword = title_keyword_match(job)
+                if not ok:
+                    continue
+                job.matched_keyword = matched_keyword
+                if not location_allowed(job):
+                    continue
+                total_score, breakdown = score_job(job)
+                job.score           = total_score
+                job.score_breakdown = breakdown
+                blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
+                job.location_normalized = detect_location(blob, company=job.company) or None
+                if total_score < threshold:
+                    continue
+                with lock:
+                    created, unique_key = upsert_job(job)
+                    seen_keys.add(unique_key)
+                    if created or force:
+                        all_matched.append(job)
 
     expire_stale_jobs(seen_keys)
     return sorted(all_matched, key=lambda j: j.score or 0, reverse=True)
@@ -1218,46 +1190,42 @@ def handle_command(text: str) -> str:
                 )
 
                 all_matched   = []
-                seen_sources  = set()
-                source_log    = []   # (name, raw_count, matched_count, error)
-                queued        = list(sources)
+                source_log    = []
                 seen_keys     = set()
+                lock          = threading.Lock()
 
-                while queued:
-                    source     = queued.pop(0)
-                    source_key = f"{source.get('type')}|{canonicalize_url(source.get('url',''))}|{source.get('company')}"
-                    if source_key in seen_sources:
-                        continue
-                    seen_sources.add(source_key)
-
+                def _scrape_source(source):
+                    """Scrape one source and return (source, raw_jobs, discovered, error)."""
                     try:
-                        # Hard 15s timeout per source — prevents one hung source
-                        # from blocking the entire scan queue
-                        result_box = [None, None]  # [jobs, discovered]
-                        fetch_exc  = [None]
+                        raw_jobs, discovered = fetch_source_jobs(source)
+                        record_source_success(source["name"], len(raw_jobs))
+                        return source, raw_jobs, discovered, None
+                    except Exception as e:
+                        err = str(e)[:120]
+                        record_source_failure(source["name"], err, "parse_error")
+                        return source, [], [], err
 
-                        def _fetch():
-                            try:
-                                result_box[0], result_box[1] = fetch_source_jobs(source)
-                            except Exception as ex:
-                                fetch_exc[0] = ex
+                sources_to_run = list(get_active_sources())
 
-                        t = threading.Thread(target=_fetch, daemon=True)
-                        t.start()
-                        t.join(timeout=15)
-
-                        if t.is_alive():
-                            # Source is hanging — skip it
-                            record_source_failure(source["name"], "hard timeout (>15s)", "timeout")
-                            source_log.append((source["name"], 0, 0, "hard timeout (>15s)"))
-                            time.sleep(0.5)
+                # Run all sources in parallel — max 10 workers, 12s timeout each
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = {executor.submit(_scrape_source, s): s for s in sources_to_run}
+                    for future in concurrent.futures.as_completed(futures, timeout=30):
+                        try:
+                            source, raw_jobs, discovered, err = future.result()
+                        except concurrent.futures.TimeoutError:
+                            source = futures[future]
+                            record_source_failure(source["name"], "timeout", "timeout")
+                            source_log.append((source["name"], 0, 0, "timeout"))
+                            continue
+                        except Exception as e:
+                            source = futures[future]
+                            source_log.append((source["name"], 0, 0, str(e)[:120]))
                             continue
 
-                        if fetch_exc[0] is not None:
-                            raise fetch_exc[0]
-
-                        raw_jobs, discovered = result_box[0] or [], result_box[1] or []
-                        record_source_success(source["name"], len(raw_jobs))
+                        if err:
+                            source_log.append((source["name"], 0, 0, err))
+                            continue
 
                         matched_this_source = 0
                         for raw in raw_jobs:
@@ -1275,24 +1243,13 @@ def handle_command(text: str) -> str:
                             job.location_normalized = detect_location(blob, company=job.company) or None
                             if total_score < threshold:
                                 continue
-                            created, unique_key = upsert_job(job)
-                            seen_keys.add(unique_key)
-                            all_matched.append(job)
+                            with lock:
+                                created, unique_key = upsert_job(job)
+                                seen_keys.add(unique_key)
+                                all_matched.append(job)
                             matched_this_source += 1
 
                         source_log.append((source["name"], len(raw_jobs), matched_this_source, None))
-
-                        for ds in discovered:
-                            dk = f"{ds.get('type')}|{canonicalize_url(ds.get('url',''))}|{ds.get('company')}"
-                            if dk not in seen_sources:
-                                queued.append(ds)
-
-                    except Exception as e:
-                        err = str(e)[:120]
-                        record_source_failure(source["name"], err, "parse_error")
-                        source_log.append((source["name"], 0, 0, err))
-
-                    time.sleep(1.5)
 
                 expire_stale_jobs(seen_keys)
                 all_matched.sort(key=lambda j: j.score or 0, reverse=True)
