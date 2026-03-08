@@ -1130,6 +1130,7 @@ def handle_command(text: str) -> str:
             "/help /status\n"
             "/showall — instantly show everything in DB matching your filters\n"
             "/scan — fresh scrape NOW + show all matching roles\n"
+            "/scandebug — same as /scan but shows per-source detail\n"
             "/jobs /latest /highpriority\n"
             "/search <term>\n"
             "/keywords /addkeyword <x> /removekeyword <x>\n"
@@ -1202,29 +1203,125 @@ def handle_command(text: str) -> str:
             send_telegram_message(f"...and {total - 30} more. Use /search <company> to filter.")
         return ""   # already sent everything directly
 
-    if lower == "/scan":
-        # Acknowledge immediately — scrape runs in background
+    if lower == "/scan" or lower == "/scandebug":
+        debug = (lower == "/scandebug")
+
         def _run_scan():
-            send_telegram_message("🔍 Scanning all sources now — this takes 1–2 minutes...")
             try:
-                jobs = collect_and_store_jobs(force=True)
+                sources   = get_active_sources()
+                threshold = quality_threshold()
+                send_telegram_message(
+                    f"🔍 Scanning {len(sources)} sources...\n"
+                    f"Location: {get_state('location_mode','london')} | "
+                    f"Score threshold: {threshold}"
+                    + ("\n[debug mode — full per-source detail]" if debug else "")
+                )
+
+                all_matched   = []
+                seen_sources  = set()
+                source_log    = []   # (name, raw_count, matched_count, error)
+                queued        = list(sources)
+                seen_keys     = set()
+
+                while queued:
+                    source     = queued.pop(0)
+                    source_key = f"{source.get('type')}|{canonicalize_url(source.get('url',''))}|{source.get('company')}"
+                    if source_key in seen_sources:
+                        continue
+                    seen_sources.add(source_key)
+
+                    try:
+                        raw_jobs, discovered = fetch_source_jobs(source)
+                        record_source_success(source["name"], len(raw_jobs))
+
+                        matched_this_source = 0
+                        for raw in raw_jobs:
+                            job = normalise_to_canonical(raw, source)
+                            ok, matched_keyword = title_keyword_match(job)
+                            if not ok:
+                                continue
+                            job.matched_keyword = matched_keyword
+                            if not location_allowed(job):
+                                continue
+                            total_score, breakdown = score_job(job)
+                            job.score           = total_score
+                            job.score_breakdown = breakdown
+                            blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
+                            job.location_normalized = detect_location(blob, company=job.company) or None
+                            if total_score < threshold:
+                                continue
+                            created, unique_key = upsert_job(job)
+                            seen_keys.add(unique_key)
+                            all_matched.append(job)
+                            matched_this_source += 1
+
+                        source_log.append((source["name"], len(raw_jobs), matched_this_source, None))
+
+                        for ds in discovered:
+                            dk = f"{ds.get('type')}|{canonicalize_url(ds.get('url',''))}|{ds.get('company')}"
+                            if dk not in seen_sources:
+                                queued.append(ds)
+
+                    except Exception as e:
+                        err = str(e)[:120]
+                        record_source_failure(source["name"], err, "parse_error")
+                        source_log.append((source["name"], 0, 0, err))
+
+                    time.sleep(1.5)
+
+                expire_stale_jobs(seen_keys)
+                all_matched.sort(key=lambda j: j.score or 0, reverse=True)
+
+                # ── Debug: per-source breakdown ──
+                if debug:
+                    lines = ["📊 Per-source results:"]
+                    for name, raw_c, match_c, err in source_log:
+                        if err:
+                            lines.append(f"  ❌ {name}: ERROR — {err}")
+                        elif raw_c == 0:
+                            lines.append(f"  🟡 {name}: 0 jobs found")
+                        elif match_c == 0:
+                            lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed filters")
+                        else:
+                            lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
+                    # Split into chunks to avoid Telegram 4096 char limit
+                    chunk, chunks = [], []
+                    for line in lines:
+                        chunk.append(line)
+                        if len("\n".join(chunk)) > 3500:
+                            chunks.append("\n".join(chunk))
+                            chunk = []
+                    if chunk:
+                        chunks.append("\n".join(chunk))
+                    for c in chunks:
+                        send_telegram_message(c)
+                        time.sleep(0.3)
+
+                # ── Summary ──
+                errors   = sum(1 for _, _, _, e in source_log if e)
+                zero_src = sum(1 for _, r, _, e in source_log if r == 0 and not e)
+                send_telegram_message(
+                    f"✅ Scan complete\n"
+                    f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} returned zero jobs\n"
+                    f"Matched: {len(all_matched)} role{'s' if len(all_matched) != 1 else ''} passed all filters\n"
+                    + (f"Threshold was {threshold} — try /quality off then /scan to see everything"
+                       if len(all_matched) == 0 and errors < len(source_log) else "")
+                )
+
+                if not all_matched:
+                    return
+
+                send_telegram_message(f"Sending top {min(len(all_matched), 10)}:")
+                for job in all_matched[:10]:
+                    send_telegram_message(format_job_alert(job))
+                    time.sleep(0.5)
+                if len(all_matched) > 10:
+                    send_telegram_message(f"...and {len(all_matched) - 10} more. Use /jobs to see all.")
+
             except Exception as e:
-                send_telegram_message(f"❌ Scan failed: {str(e)[:200]}")
-                return
-            if not jobs:
-                send_telegram_message("✅ Scan complete. No matching roles found right now.")
-                return
-            # Send summary header
-            send_telegram_message(
-                f"✅ Scan complete — {len(jobs)} matching role{'s' if len(jobs) != 1 else ''} found:\n"
-                f"(sending top {min(len(jobs), 10)} by score)"
-            )
-            # Send individual alerts for top 10
-            for job in jobs[:10]:
-                send_telegram_message(format_job_alert(job))
-                time.sleep(0.5)
-            if len(jobs) > 10:
-                send_telegram_message(f"...and {len(jobs) - 10} more. Use /jobs to see all.")
+                import traceback
+                send_telegram_message(f"❌ Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
+
         threading.Thread(target=_run_scan, daemon=True).start()
         return "⏳ Scan started — results incoming shortly."
 
