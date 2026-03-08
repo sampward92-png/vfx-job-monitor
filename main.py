@@ -139,7 +139,8 @@ DEFAULT_EXCLUDES = [
 
     # Specific known non-production programmes
     "jedi academy",            # ILM US programme
-    "animation launchpad",     # animation-specific, not production
+    "animation launchpad",     # animation-specific, not production (e.g. "Animation - Launchpad")
+    "animation - launchpad",   # dash variant
     "animation intern",        # animation-specific internship
 ]
 
