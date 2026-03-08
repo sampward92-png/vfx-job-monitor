@@ -136,6 +136,11 @@ DEFAULT_EXCLUDES = [
     "sales ",
     "business development",
     "marketing manager",
+
+    # Specific known non-production programmes
+    "jedi academy",            # ILM US programme
+    "animation launchpad",     # animation-specific, not production
+    "animation intern",        # animation-specific internship
 ]
 
 UK_STUDIO_COMPANIES = {
@@ -1081,6 +1086,11 @@ def collect_and_store_jobs(force: bool = False) -> list:
                 job.score_breakdown = breakdown
                 blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
                 job.location_normalized = detect_location(blob, company=job.company) or None
+
+                # Hard drop anything explicitly Non-UK — score 0 means location penalty fired
+                if job.location_normalized == "Non-UK" or total_score <= 0:
+                    continue
+
                 if total_score < threshold:
                     continue
                 with lock:
@@ -1351,6 +1361,8 @@ def handle_command(text: str) -> str:
                             job.score_breakdown = breakdown
                             blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
                             job.location_normalized = detect_location(blob, company=job.company) or None
+                            if job.location_normalized == "Non-UK" or total_score <= 0:
+                                continue
                             if total_score < threshold:
                                 continue
                             with lock:
