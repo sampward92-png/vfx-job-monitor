@@ -64,6 +64,10 @@ DEFAULT_EXCLUDES = [
     "compositor",
     "compositing",
     "modell",          # modeller, modelling
+    "model artist",    # gen ai model artist etc
+    "ai artist",
+    "media operator",
+    "operator",
     "rigger",
     "rigging",
     "lighter",
@@ -127,8 +131,11 @@ UK_TERMS = [
 NON_UK_TERMS = [
     "usa", "united states", "new york", "los angeles", "california",
     "canada", "montreal", "vancouver", "sydney", "australia", "melbourne",
-    "mumbai", "india", "singapore", "berlin", "munich", "france", "paris",
-    "barcelona", "toronto",
+    "mumbai", "india", "bengaluru", "bangalore", "hyderabad", "chennai", "pune",
+    "singapore", "berlin", "munich", "germany", "france", "paris",
+    "barcelona", "spain", "toronto", "chicago", "atlanta", "seattle",
+    "san francisco", "new zealand", "auckland", "dubai", "uae",
+    "amsterdam", "netherlands", "sweden", "stockholm",
 ]
 
 DEFAULT_SOURCES = [
@@ -838,6 +845,9 @@ def generic_extract_jobs_from_soup(source: dict, soup) -> list:
         href  = a.get("href", "").strip()
         title = clean_text(a.get_text(" ", strip=True))
         if not href or not title or len(title) < 8:
+            continue
+        # Reject titles that look like URL paths — e.g. "/resource/launchpad-internship"
+        if title.startswith("/") or title.startswith("http"):
             continue
         if normalize_text(title) in NAV_PATTERNS:
             continue
