@@ -682,28 +682,27 @@ def location_allowed(job: CanonicalJob) -> bool:
     if mode == "off":
         return True
 
-    blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text, job.company]))
-    loc  = detect_location(blob, company=job.company)
-
-    # Hard reject anything explicitly non-UK regardless of mode
-    if loc == "Non-UK":
+    # For the Non-UK hard-reject, only check the location field itself —
+    # NOT the full description. Studio careers pages often mention global
+    # offices in body text which was incorrectly triggering Non-UK rejection.
+    loc_signal = detect_location(job.location_raw or "", company=job.company)
+    if loc_signal == "Non-UK":
         return False
 
-    # If we got a clean London or UK signal, allow it
+    # For positive location detection, use title + location + company
+    blob = " ".join(filter(None, [job.title, job.location_raw, job.company]))
+    loc  = detect_location(blob, company=job.company)
+
+    # Clean London signal
     if loc == "London":
         return True
+
+    # UK mode — also accept explicit UK signal
     if mode == "uk" and loc == "UK":
         return True
 
-    # Unknown-UK-Studio: source is a known London VFX/animation studio.
-    # Trust the source — these companies are London-headquartered.
-    # Only reject if there's an explicit non-UK location in the raw text.
-    if loc == "Unknown-UK-Studio" and job.source_kind == "studio":
-        return True
-
-    # No location signal at all but comes from a known studio source —
-    # allow it rather than silently drop it.
-    if not loc and job.company in UK_STUDIO_COMPANIES:
+    # Known London VFX studio source — trust it
+    if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
         return True
 
     return False
