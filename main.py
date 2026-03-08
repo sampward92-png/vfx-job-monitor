@@ -678,23 +678,35 @@ def detect_location(text: str, company: str = "") -> str:
     return ""
 
 def location_allowed(job: CanonicalJob) -> bool:
-    mode = get_state("location_mode", "london").lower()
+    mode = get_state("location_mode", "off").lower()
     if mode == "off":
         return True
+
     blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text, job.company]))
     loc  = detect_location(blob, company=job.company)
+
+    # Hard reject anything explicitly non-UK regardless of mode
     if loc == "Non-UK":
         return False
-    strong_title = any(t in normalize_text(job.title) for t in [
-        "production assistant", "production coordinator", "junior production",
-        "graduate producer", "assistant producer", "production trainee",
-        "production intern", "studio assistant",
-    ])
-    if mode == "london":
-        return loc == "London" or (loc == "Unknown-UK-Studio" and strong_title)
-    if mode == "uk":
-        return loc in {"London", "UK"} or (loc == "Unknown-UK-Studio" and strong_title)
-    return True
+
+    # If we got a clean London or UK signal, allow it
+    if loc == "London":
+        return True
+    if mode == "uk" and loc == "UK":
+        return True
+
+    # Unknown-UK-Studio: source is a known London VFX/animation studio.
+    # Trust the source — these companies are London-headquartered.
+    # Only reject if there's an explicit non-UK location in the raw text.
+    if loc == "Unknown-UK-Studio" and job.source_kind == "studio":
+        return True
+
+    # No location signal at all but comes from a known studio source —
+    # allow it rather than silently drop it.
+    if not loc and job.company in UK_STUDIO_COMPANIES:
+        return True
+
+    return False
 
 def title_keyword_match(job: CanonicalJob):
     hay = normalize_text(f"{job.title} {job.description_text or ''}")
