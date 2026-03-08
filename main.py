@@ -909,10 +909,20 @@ def upsert_job(job: CanonicalJob) -> tuple[bool, str]:
 
 # ── Core monitoring run ───────────────────────────────────────────────────────
 
-def collect_and_store_jobs() -> list:
+def collect_and_store_jobs(force: bool = False) -> list:
+    """
+    Run a full scrape across all active sources.
+
+    force=False (default, scheduler): only return jobs that are genuinely new
+    (not previously seen in the DB). This is normal operation.
+
+    force=True (/scan command): return ALL jobs that pass keyword/location/score
+    filters, including ones already in the DB. Used so the user can surface
+    roles that exist right now but were never alerted on.
+    """
     queued       = get_active_sources()
     seen_sources = set()
-    new_jobs     = []
+    all_matched  = []   # every job passing filters this run
     seen_keys    = set()
     threshold    = quality_threshold()
 
@@ -957,8 +967,8 @@ def collect_and_store_jobs() -> list:
 
                 created, unique_key = upsert_job(job)
                 seen_keys.add(unique_key)
-                if created:
-                    new_jobs.append(job)
+                if created or force:
+                    all_matched.append(job)
 
             for ds in discovered:
                 dk = f"{ds.get('type')}|{canonicalize_url(ds.get('url',''))}|{ds.get('company')}"
@@ -988,7 +998,7 @@ def collect_and_store_jobs() -> list:
         time.sleep(1.5)
 
     expire_stale_jobs(seen_keys)
-    return sorted(new_jobs, key=lambda j: j.score or 0, reverse=True)
+    return sorted(all_matched, key=lambda j: j.score or 0, reverse=True)
 
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
@@ -1107,7 +1117,10 @@ def handle_command(text: str) -> str:
     if lower == "/help":
         return (
             "Commands:\n"
-            "/help /status /jobs /latest /highpriority\n"
+            "/help /status\n"
+            "/showall — instantly show everything in DB matching your filters\n"
+            "/scan — fresh scrape NOW + show all matching roles\n"
+            "/jobs /latest /highpriority\n"
             "/search <term>\n"
             "/keywords /addkeyword <x> /removekeyword <x>\n"
             "/companies /sources\n"
@@ -1116,6 +1129,94 @@ def handle_command(text: str) -> str:
             "/quality strict|normal|off\n"
             "/pause /resume"
         )
+
+    if lower == "/showall":
+        rows = db_execute("""
+            SELECT title, company, location_raw, apply_url, first_seen, score,
+                   score_breakdown_json, matched_keyword, source_name, ats_type
+            FROM jobs
+            WHERE job_status = 'active'
+            ORDER BY score DESC, id DESC
+            LIMIT 30
+        """, fetch=True)
+        if not rows:
+            return (
+                "No active jobs in the database yet.\n"
+                "Use /scan to trigger a fresh scrape, or check /status to see if the bot has run."
+            )
+        total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+        # Send header
+        send_telegram_message(
+            f"📋 All stored matching roles ({total} total, showing top {min(len(rows), 30)} by score):"
+        )
+        time.sleep(0.3)
+        # Send each job as a rich card
+        for row in rows[:30]:
+            title, company, loc, url, first_seen, score, bd_json, keyword, source_name, ats_type = row
+            bd = {}
+            try:
+                bd = json.loads(bd_json or "{}")
+            except Exception:
+                pass
+            loc_line  = f"📍 {loc}" if loc else ""
+            src_line  = f"📡 {source_name}" + (f" ({ats_type})" if ats_type else "")
+            kw_line   = f"🔑 Matched: {keyword}" if keyword else ""
+            date_line = f"👁 First seen: {first_seen}"
+
+            reasons = []
+            for key, label in [
+                ("title_strength",    "title match"),
+                ("juniority",         "junior signal"),
+                ("location_confidence","location"),
+                ("source_quality",    "studio source"),
+            ]:
+                v = bd.get(key, 0)
+                if v and v > 0:
+                    reasons.append(f"+{v} {label}")
+
+            lines = [
+                f"⭐ Score: {int(score or 0)} — {title}",
+                f"🏢 {company}",
+            ]
+            if loc_line:   lines.append(loc_line)
+            if kw_line:    lines.append(kw_line)
+            if reasons:    lines.append("Why: " + " | ".join(reasons))
+            lines.append(date_line)
+            lines.append(src_line)
+            if url:        lines.append(f"🔗 {url}")
+
+            send_telegram_message("\n".join(lines))
+            time.sleep(0.4)
+
+        if total > 30:
+            send_telegram_message(f"...and {total - 30} more. Use /search <company> to filter.")
+        return ""   # already sent everything directly
+
+    if lower == "/scan":
+        # Acknowledge immediately — scrape runs in background
+        def _run_scan():
+            send_telegram_message("🔍 Scanning all sources now — this takes 1–2 minutes...")
+            try:
+                jobs = collect_and_store_jobs(force=True)
+            except Exception as e:
+                send_telegram_message(f"❌ Scan failed: {str(e)[:200]}")
+                return
+            if not jobs:
+                send_telegram_message("✅ Scan complete. No matching roles found right now.")
+                return
+            # Send summary header
+            send_telegram_message(
+                f"✅ Scan complete — {len(jobs)} matching role{'s' if len(jobs) != 1 else ''} found:\n"
+                f"(sending top {min(len(jobs), 10)} by score)"
+            )
+            # Send individual alerts for top 10
+            for job in jobs[:10]:
+                send_telegram_message(format_job_alert(job))
+                time.sleep(0.5)
+            if len(jobs) > 10:
+                send_telegram_message(f"...and {len(jobs) - 10} more. Use /jobs to see all.")
+        threading.Thread(target=_run_scan, daemon=True).start()
+        return "⏳ Scan started — results incoming shortly."
 
     if lower == "/status":
         total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
@@ -1293,8 +1394,9 @@ def start_background_threads():
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
     send_telegram_message(
-        "✅ VFX Monitor — Phase 1b live\n"
-        "WAL ✓  busy_timeout ✓  CanonicalJob ✓  Score breakdown ✓  Health events ✓"
+        "✅ VFX Monitor — Phase 1c live\n"
+        "WAL ✓  CanonicalJob ✓  Score breakdown ✓  Health events ✓\n"
+        "New: /scan to trigger an immediate full scrape"
     )
 
 start_background_threads()
