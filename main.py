@@ -309,8 +309,17 @@ def health():
     return {"status": "ok"}, 200
 
 
-if __name__ == "__main__":
-    init_db()
+init_db()
+
+_started = False
+
+def start_background_threads():
+    global _started
+    if _started:
+        return
+    _started = True
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=PORT)
+    send_telegram_message("Bot started successfully.")
+
+start_background_threads()
