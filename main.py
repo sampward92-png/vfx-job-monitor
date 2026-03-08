@@ -45,6 +45,7 @@ DEFAULT_KEYWORDS = [
 ]
 
 DEFAULT_EXCLUDES = [
+    # Seniority — wrong level
     "senior",
     "supervisor",
     "head of",
@@ -52,6 +53,57 @@ DEFAULT_EXCLUDES = [
     "lead ",
     "principal",
     "executive producer",
+    "vp ",
+    "vice president",
+    "manager",
+
+    # Artist / technical roles — not production track
+    "animator",
+    "animation artist",
+    "matte paint",
+    "compositor",
+    "compositing",
+    "modell",          # modeller, modelling
+    "rigger",
+    "rigging",
+    "lighter",
+    "lighting artist",
+    "texture artist",
+    "concept artist",
+    "storyboard artist",
+    "vfx artist",
+    "cg artist",
+    "3d artist",
+    "2d artist",
+    "motion graphic",
+    "motion design",
+    "editor",          # vfx editor, offline editor etc
+    "colourist",
+    "colorist",
+    "sound design",
+    "music supervisor",
+    "technical director",
+    " td ",
+    "pipeline",
+    "software engineer",
+    "developer",
+    "programmer",
+    "it support",
+    "systems admin",
+    "data scientist",
+    "machine learning",
+    "recruiter",
+    "talent acquisition",
+    "hr ",
+    "human resources",
+    "accountant",
+    "finance manager",
+    "legal ",
+    "lawyer",
+    "solicitor",
+    "sales ",
+    "business development",
+    "marketing manager",
 ]
 
 UK_STUDIO_COMPANIES = {
@@ -404,9 +456,10 @@ def seed_defaults():
         for kw in DEFAULT_KEYWORDS:
             db_execute("INSERT OR IGNORE INTO keywords (keyword) VALUES (?)", (kw,))
 
-    if not db_execute("SELECT phrase FROM excludes", fetch=True):
-        for phrase in DEFAULT_EXCLUDES:
-            db_execute("INSERT OR IGNORE INTO excludes (phrase) VALUES (?)", (phrase,))
+    # Always ensure all default excludes are present — handles new additions
+    # on redeploy without wiping any custom excludes the user has added
+    for phrase in DEFAULT_EXCLUDES:
+        db_execute("INSERT OR IGNORE INTO excludes (phrase) VALUES (?)", (phrase,))
 
     if not get_state("location_mode"): set_state("location_mode", "london")
     if not get_state("paused"):        set_state("paused", "0")
