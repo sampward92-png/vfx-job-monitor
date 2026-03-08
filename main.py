@@ -504,7 +504,7 @@ def seed_defaults():
 
     if not get_state("location_mode"): set_state("location_mode", "london")
     if not get_state("paused"):        set_state("paused", "0")
-    if not get_state("quality_mode"):  set_state("quality_mode", "off")
+   if not get_state("quality_mode"):  set_state("quality_mode", "normal")
 
     existing = db_execute("SELECT COUNT(*) FROM sources", fetch=True)
     if not existing or existing[0][0] == 0:
@@ -796,8 +796,12 @@ def location_allowed(job: CanonicalJob) -> bool:
         return True
 
     # Known London VFX studio source — trust it
-    if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
-        return True
+    # Trust known UK studio career pages, but still reject explicit non-UK roles
+if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
+    loc_text = normalize_text(job.location_raw or "")
+    if any(t in loc_text for t in NON_UK_TERMS):
+        return False
+    return True
 
     return False
 
