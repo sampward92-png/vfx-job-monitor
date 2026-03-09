@@ -920,9 +920,27 @@ def title_keyword_match(job: CanonicalJob):
     title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
     if any(ex in title_hay for ex in get_excludes()):
         return False, None
-    # Keywords: title + body so we catch roles described in the listing
-    full_hay = normalize_text(f"{job.title} {job.description_text or ''}")
-    matched = next((kw for kw in get_keywords() if kw in full_hay), None)
+
+    keywords = get_keywords()
+
+    # Primary: title match (strong signal — title must contain a keyword)
+    title_only = normalize_text(job.title)
+    matched = next((kw for kw in keywords if kw in title_only), None)
+    if matched:
+        return True, matched
+
+    # Secondary: body-only match, but ONLY for short specific keywords that are
+    # meaningful on their own (trainee, apprentice, intern, runner, graduate scheme etc.)
+    # This catches listings like "VFX Department Opportunity – we seek a trainee"
+    # but avoids false positives from "assistant" buried in boilerplate.
+    BODY_ALLOWED_KEYWORDS = {
+        "trainee", "apprentice", "internship", "intern", "work experience",
+        "graduate scheme", "graduate programme", "graduate program",
+        "launchpad", "kickstart", "talent scheme", "emerging talent",
+        "entry level", "entry-level",
+    }
+    body_hay = normalize_text(job.description_text or "")
+    matched = next((kw for kw in keywords if kw in BODY_ALLOWED_KEYWORDS and kw in body_hay), None)
     return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
