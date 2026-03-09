@@ -58,13 +58,16 @@ DEFAULT_EXCLUDES = [
     "3d artist", "2d artist", "motion graphic", "motion design",
     "editor", "colourist", "colorist", "sound design", "music supervisor",
     "technical director", " td ", "pipeline",
-    "software engineer", "developer", "programmer",
+    "software engineer", "developer", "programmer", "engineer",
     "it support", "systems admin", "data scientist", "machine learning",
+    "cloud ", "devops", "ml ops", "mlops", "realtime artist", "immersive tech",
+    "technical artist", "tech artist", "tools ", "infrastructure",
     "recruiter", "talent acquisition", "hr ", "human resources",
     "accountant", "finance manager", "legal ", "lawyer", "solicitor",
     "sales ", "business development", "marketing manager",
     # Generic / non-specific postings
     "general application", "general enquiry", "speculative application",
+    "job alert", "sign up for", "sign-up for",
     "internal mobility", "internal transfer", "expression of interest",
     # Specific non-production programmes
     "jedi academy", "animation launchpad", "animation-launchpad", "animation - launchpad", "animation intern",
@@ -123,7 +126,7 @@ DISCOVERY_BLOCKED_DOMAINS = {
 }
 
 DEFAULT_SOURCES = [
-    {"name": "Framestore Careers",       "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.framestore.com/careers"},
+    # Framestore Careers (html) removed - Framestore Recruitee covers all roles via API
     {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "recruitee",  "url": "https://framestore.recruitee.com/"},
     {"name": "DNEG Open Positions",      "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/dneg"},
     {"name": "DNEG Jobvite",             "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs"},
@@ -1866,6 +1869,13 @@ def handle_command(text: str) -> str:
         if total > 30:
             send_telegram_message(f"...and {total-30} more. Use /search <company> to filter.")
         return ""
+
+    if lower == "/reseed":
+        # Re-run seed_defaults to push any new keywords/excludes to DB
+        seed_defaults()
+        kw_count = len(get_keywords())
+        ex_count = len(get_excludes())
+        return f"Reseeded. Keywords: {kw_count}, Excludes: {ex_count}"
 
     if lower == "/fixsources":
         # Force-sync source types from DEFAULT_SOURCES to DB
