@@ -1819,6 +1819,40 @@ def handle_command(text: str) -> str:
             send_telegram_message(f"...and {total-30} more. Use /search <company> to filter.")
         return ""
 
+    if lower == "/diag":
+        def _diag():
+            import traceback as _tb
+            results = []
+            # Test 1: basic outbound HTTP
+            try:
+                r = requests.get("https://httpbin.org/get", headers=HEADERS, timeout=10)
+                results.append(f"httpbin: {r.status_code}, {len(r.text)} chars")
+            except Exception as e:
+                results.append(f"httpbin FAIL: {type(e).__name__}: {e}")
+            # Test 2: fetch a known Workable API
+            try:
+                r = requests.post(
+                    "https://apply.workable.com/api/v3/accounts/nexusstudios/jobs",
+                    headers={**HEADERS, "Content-Type": "application/json"},
+                    json={"query":"","location":[],"department":[],"worktype":[],"remote":[]},
+                    timeout=10
+                )
+                data = r.json()
+                count = len(data.get("results", []))
+                results.append(f"Workable API: {r.status_code}, {count} jobs")
+            except Exception as e:
+                results.append(f"Workable FAIL: {type(e).__name__}: {str(e)[:80]}")
+            # Test 3: fetch Framestore HTML, report first 200 chars
+            try:
+                r = requests.get("https://www.framestore.com/careers", headers=HEADERS, timeout=10)
+                snippet = r.text[:200].replace("\n"," ")
+                results.append(f"Framestore HTML: {r.status_code}, starts: {snippet!r:.120}")
+            except Exception as e:
+                results.append(f"Framestore FAIL: {type(e).__name__}: {str(e)[:80]}")
+            send_telegram_message("🔬 Diagnostics:\n" + "\n".join(results))
+        threading.Thread(target=_diag, daemon=True).start()
+        return "Running diagnostics..."
+
     if lower in {"/scan", "/scandebug"}:
         debug = (lower == "/scandebug")
 
