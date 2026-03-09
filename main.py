@@ -260,14 +260,27 @@ def same_or_subdomain(candidate_host: str, source_host: str) -> bool:
 def is_allowed_html_link(source: dict, full_url: str) -> bool:
     """
     For generic HTML career pages, keep same-domain links and ATS links.
-    Drop unrelated external opportunity/community links that create false positives.
+    Drop unrelated external opportunity/community links and brochure/contact pages
+    that create false positives.
     """
-    if not full_url:
+    if not full_url or is_malformed_url(full_url):
         return False
+
+    parsed = urlparse(full_url)
+    path = normalize_text(parsed.path or "")
+    blocked_path_terms = {
+        "/contact", "/contacts", "/about", "/team", "/news", "/blog",
+        "/our-work", "/work", "/services", "/projects", "/portfolio",
+        "/case-study", "/case-studies", "/studio", "/capabilities",
+    }
+    if any(term in path for term in blocked_path_terms):
+        return False
+
     if identify_ats_type(full_url):
         return True
+
     source_host = urlparse(source["url"]).netloc.lower()
-    full_host = urlparse(full_url).netloc.lower()
+    full_host = parsed.netloc.lower()
     return same_or_subdomain(full_host, source_host)
 
 def is_generic_html_title(title: str) -> bool:
@@ -1044,7 +1057,10 @@ def generic_extract_jobs_from_soup(source: dict, soup) -> list:
         if not href:
             continue
 
-        full_url = urljoin(source["url"], href)
+        full_url = canonicalize_url(urljoin(source["url"], href))
+        if not is_allowed_html_link(source, full_url):
+            continue
+
         link_path = urlparse(full_url).path.rstrip("/")
         if link_path == source_path or not link_path:
             continue
@@ -1506,6 +1522,7 @@ def handle_command(text: str) -> str:
                 all_matched   = []
                 source_log    = []
                 seen_keys     = set()
+                emitted_keys  = set()
                 lock          = threading.Lock()
 
                 def _scrape_source(source):
@@ -1573,7 +1590,9 @@ def handle_command(text: str) -> str:
                             with lock:
                                 created, unique_key = upsert_job(job)
                                 seen_keys.add(unique_key)
-                                all_matched.append(job)
+                                if unique_key not in emitted_keys:
+                                    emitted_keys.add(unique_key)
+                                    all_matched.append(job)
                             matched_this_source += 1
 
                         source_log.append((source["name"], len(raw_jobs), matched_this_source, None, reason_counts))
