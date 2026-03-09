@@ -816,20 +816,29 @@ def location_allowed(job: CanonicalJob) -> bool:
         return True
     if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
         return True
+    # Industry boards (ScreenSkills, Animation UK, UK Screen Alliance) are UK-only by definition
+    if job.source_kind == "industry_board":
+        return True
     return False
 
 def title_keyword_match(job: CanonicalJob):
-    hay = normalize_text(f"{job.title} {job.description_text or ''}")
-    if any(ex in hay for ex in get_excludes()):
+    # Excludes: title only — avoids body text false positives
+    # (e.g. "working alongside editors" should not exclude a PA role)
+    title_hay = normalize_text(job.title)
+    if any(ex in title_hay for ex in get_excludes()):
         return False, None
-    matched = next((kw for kw in get_keywords() if kw in hay), None)
+    # Keywords: title + body so we catch roles described in the listing
+    full_hay = normalize_text(f"{job.title} {job.description_text or ''}")
+    matched = next((kw for kw in get_keywords() if kw in full_hay), None)
     return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
-    hay = normalize_text(f"{job.title} {job.description_text or ''}")
-    if any(ex in hay for ex in get_excludes()):
+    # Excludes on title only
+    title_hay = normalize_text(job.title)
+    if any(ex in title_hay for ex in get_excludes()):
         return "excluded"
-    if not next((kw for kw in get_keywords() if kw in hay), None):
+    full_hay = normalize_text(f"{job.title} {job.description_text or ''}")
+    if not next((kw for kw in get_keywords() if kw in full_hay), None):
         return "no_keyword"
     if not location_allowed(job):
         return "location"
@@ -1244,8 +1253,8 @@ def format_job_alert(job: CanonicalJob) -> str:
     loc        = prettify_location(job.location_raw or job.location_normalized)
     kind       = classify_opportunity(job)
     kind_label = opportunity_label(job)
-    header     = ("Programme" if kind == "programme" else
-                  "HIGH PRIORITY" if (job.score or 0) >= 75 else "Role")
+    header     = ("🎓 Programme" if kind == "programme" else
+                  "🎯 HIGH PRIORITY" if (job.score or 0) >= 75 else "🎯 Role")
 
     reasons = []
     for pts, label in [
@@ -1261,13 +1270,13 @@ def format_job_alert(job: CanonicalJob) -> str:
     if negs < 0: reasons.append(f"- negative signals ({negs})")
 
     lines = [header, f"{job.company} -- {job.title}",
-             f"Type: {kind_label}", f"Location: {loc}", f"Score: {int(job.score or 0)}"]
+             f"Type: {kind_label}", f"📍 {loc}", f"⭐ Score: {int(job.score or 0)}"]
     if reasons:
         lines += ["", "Why it matched:"] + [f"  {r}" for r in reasons[:6]]
     if job.source_type:
-        lines += ["", f"Source: {job.source_name} ({job.ats_type or job.source_type})"]
+        lines += ["", f"📡 Source: {job.source_name} ({job.ats_type or job.source_type})"]
     if job.apply_url:
-        lines.append(f"{job.apply_url}")
+        lines.append(f"🔗 {job.apply_url}")
     return "\n".join(lines)
 
 def format_job_rows(rows) -> str:
@@ -1461,17 +1470,17 @@ def handle_command(text: str) -> str:
                 all_matched.sort(key=lambda j: j.score or 0, reverse=True)
 
                 if debug:
-                    lines = ["Per-source results:"]
+                    lines = ["📊 Per-source results:"]
                     for name, raw_c, match_c, err, reason_counts in source_log:
                         if err:
-                            lines.append(f"  ERROR {name}: {err}")
+                            lines.append(f"  ❌ {name}: {err}")
                         elif raw_c == 0:
-                            lines.append(f"  ZERO {name}: 0 jobs found")
+                            lines.append(f"  🟡 {name}: 0 jobs found")
                         elif match_c == 0:
                             rsummary = ", ".join(f"{k}={v}" for k, v in (reason_counts or {}).items() if v > 0)
-                            lines.append(f"  NONE {name}: {raw_c} found, 0 passed" + (f" ({rsummary})" if rsummary else ""))
+                            lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed" + (f" ({rsummary})" if rsummary else ""))
                         else:
-                            lines.append(f"  OK   {name}: {raw_c} found, {match_c} matched")
+                            lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
                     chunk, chunks = [], []
                     for line in lines:
                         chunk.append(line)
@@ -1495,7 +1504,7 @@ def handle_command(text: str) -> str:
                     if not all_matched and errors < len(source_log) else ""
                 )
                 send_telegram_message(
-                    f"Scan complete\n"
+                    f"✅ Scan complete\n"
                     f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} zero jobs\n"
                     f"{matched_line}{hint}"
                 )
