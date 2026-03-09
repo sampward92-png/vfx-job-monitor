@@ -2732,6 +2732,479 @@ def web_apply_job(job_id: int):
         mark_job_interaction(row[0][0], "applied")
     return redirect(request.referrer or url_for("web_applied_page"))
 
+# ──────────────────────────────────────────────────────────────────────────────
+# BROADER MARKET COVERAGE + STRONGER SINGLE-JOB PAGE DETECTION
+# Paste this block ABOVE the "Startup" section.
+# It safely extends the current working script.
+# ──────────────────────────────────────────────────────────────────────────────
+
+EXTRA_PRODUCTION_KEYWORDS = [
+    "post production runner",
+    "post-production runner",
+    "post production assistant",
+    "post-production assistant",
+    "post production coordinator",
+    "post-production coordinator",
+    "studio runner",
+    "studio assistant",
+    "studio production assistant",
+    "production services coordinator",
+    "production operations",
+    "production operations intern",
+    "production management placement",
+    "production management placement intern",
+    "development trainee",
+    "team assistant",
+    "assistant producer",
+    "production trainee",
+    "production administrator",
+    "production admin",
+]
+
+BROAD_MARKET_SOURCES = [
+    {
+        "name": "Studio RM Runner",
+        "company": "Studio RM",
+        "kind": "studio",
+        "priority": 2,
+        "type": "html",
+        "url": "https://studio-rm.com/careers/runner",
+    },
+    {
+        "name": "If You Could Jobs",
+        "company": "If You Could",
+        "kind": "industry_board",
+        "priority": 3,
+        "type": "html",
+        "url": "https://www.ifyoucouldjobs.com/jobs",
+    },
+    {
+        "name": "Bright Network Creative",
+        "company": "Bright Network",
+        "kind": "industry_board",
+        "priority": 3,
+        "type": "html",
+        "url": "https://www.brightnetwork.co.uk/graduate-jobs/publicis-groupe/post-production-runner-1",
+    },
+    {
+        "name": "ProductionBase VFX",
+        "company": "ProductionBase",
+        "kind": "industry_board",
+        "priority": 3,
+        "type": "html",
+        "url": "https://www.productionbase.co.uk/film-tv-jobs/production-assistant--vfx-london-07.24.0238231",
+    },
+    {
+        "name": "EntertainmentCareers London",
+        "company": "EntertainmentCareers",
+        "kind": "industry_board",
+        "priority": 3,
+        "type": "html",
+        "url": "https://www.entertainmentcareers.net/jobs/s/production-assistant/london-uk/",
+    },
+]
+
+# Merge extra keywords into the existing defaults before seed_defaults/init_db runs
+try:
+    for _kw in EXTRA_PRODUCTION_KEYWORDS:
+        if _kw not in DEFAULT_KEYWORDS:
+            DEFAULT_KEYWORDS.append(_kw)
+except Exception:
+    pass
+
+# Merge broader-market sources into the existing defaults before seed_defaults/init_db runs
+try:
+    _existing_default_urls = {s.get("url") for s in DEFAULT_SOURCES}
+    for _src in BROAD_MARKET_SOURCES:
+        if _src.get("url") not in _existing_default_urls:
+            DEFAULT_SOURCES.append(_src)
+except Exception:
+    pass
+
+# Additional heuristics for broad-market single-role pages
+_BROAD_MARKET_SINGLE_PAGE_SIGNALS = {
+    "apply", "apply now", "how to apply", "send your cv", "send cv", "email your cv",
+    "email cv", "job description", "responsibilities", "requirements", "qualifications",
+    "about the role", "what you'll do", "what you will do", "the role",
+    "part time", "part-time", "full time", "full-time", "contract", "permanent",
+    "freelance", "location", "salary", "reporting to", "experience", "skills",
+    "closing date", "benefits",
+}
+
+_GENERIC_INDEX_PAGE_TITLES = {
+    "jobs", "careers", "opportunities", "vacancies", "job board",
+    "careers, skills and jobs", "skills", "navigation", "main navigation",
+    "learn more", "browse roles", "current opportunities", "job listings",
+    "find out more", "view all jobs", "open roles", "all jobs", "current vacancies",
+    "search jobs", "find jobs",
+}
+
+_SINGLE_JOB_TITLE_HINTS = {
+    "runner", "production", "coordinator", "assistant", "intern",
+    "trainee", "post production", "post-production", "studio"
+}
+
+_BROAD_MARKET_BLOCKED_PATH_SNIPPETS = [
+    "/contact", "/about", "/team", "/news", "/blog", "/privacy", "/terms",
+    "/cookies", "/members", "/membership", "/resources",
+]
+
+def _safe_meta_content(soup, attrs):
+    try:
+        tag = soup.find("meta", attrs=attrs)
+        return clean_text(tag.get("content", "")) if tag else ""
+    except Exception:
+        return ""
+
+def _extract_jsonld_jobposting(soup):
+    try:
+        scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
+        for script in scripts:
+            raw = script.string or script.get_text(" ", strip=True) or ""
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+
+            candidates = data if isinstance(data, list) else [data]
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                item_type = str(item.get("@type", "")).lower()
+                if item_type == "jobposting":
+                    title = clean_text(item.get("title", ""))
+                    desc_html = item.get("description", "") or ""
+                    desc = clean_text(BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True))
+                    loc = ""
+                    job_loc = item.get("jobLocation")
+                    if isinstance(job_loc, dict):
+                        addr = job_loc.get("address")
+                        if isinstance(addr, dict):
+                            loc = clean_text(" ".join([
+                                str(addr.get("addressLocality", "") or ""),
+                                str(addr.get("addressRegion", "") or ""),
+                                str(addr.get("addressCountry", "") or ""),
+                            ]))
+                    elif isinstance(job_loc, list) and job_loc:
+                        addr = job_loc[0].get("address", {}) if isinstance(job_loc[0], dict) else {}
+                        if isinstance(addr, dict):
+                            loc = clean_text(" ".join([
+                                str(addr.get("addressLocality", "") or ""),
+                                str(addr.get("addressRegion", "") or ""),
+                                str(addr.get("addressCountry", "") or ""),
+                            ]))
+                    return {
+                        "title": title,
+                        "description": desc,
+                        "location": loc,
+                        "has_jobposting": True,
+                    }
+    except Exception:
+        pass
+    return {
+        "title": "",
+        "description": "",
+        "location": "",
+        "has_jobposting": False,
+    }
+
+def _looks_like_generic_index_page(title: str, body: str, url: str) -> bool:
+    low_title = normalize_text(title)
+    low_body = normalize_text(body)
+    low_url = (url or "").lower()
+
+    if low_title in _GENERIC_INDEX_PAGE_TITLES:
+        return True
+
+    if any(snippet in low_url for snippet in _BROAD_MARKET_BLOCKED_PATH_SNIPPETS):
+        return True
+
+    if (
+        any(x in low_title for x in ["careers", "jobs", "skills", "opportunities", "vacancies"])
+        and not any(h in low_body for h in _SINGLE_JOB_TITLE_HINTS)
+    ):
+        return True
+
+    return False
+
+def _looks_like_single_job_page(title: str, body: str, url: str) -> bool:
+    low_title = normalize_text(title)
+    low_body = normalize_text(body)
+    low_url = (url or "").lower()
+
+    if not title or len(title) < 4:
+        return False
+
+    if _looks_like_generic_index_page(title, body, url):
+        return False
+
+    title_signal = any(h in low_title for h in _SINGLE_JOB_TITLE_HINTS)
+    body_signal = any(s in low_body for s in _BROAD_MARKET_SINGLE_PAGE_SIGNALS)
+
+    if title_signal and body_signal:
+        return True
+
+    if body_signal and any(h in low_body for h in _SINGLE_JOB_TITLE_HINTS):
+        return True
+
+    if any(h.replace(" ", "-") in low_url for h in _SINGLE_JOB_TITLE_HINTS) and body_signal:
+        return True
+
+    return False
+
+def _extract_best_h1_h2_title(soup) -> str:
+    candidates = []
+    for tag_name in ["h1", "h2", "title"]:
+        for el in soup.find_all(tag_name):
+            txt = clean_text(el.get_text(" ", strip=True))
+            if txt and len(txt) >= 4:
+                candidates.append(txt)
+
+    def _score(txt: str) -> int:
+        low = normalize_text(txt)
+        score = 0
+        if low in _GENERIC_INDEX_PAGE_TITLES:
+            score -= 100
+        if 8 <= len(txt) <= 120:
+            score += 10
+        if any(h in low for h in _SINGLE_JOB_TITLE_HINTS):
+            score += 40
+        if any(x in low for x in ["production", "runner", "coordinator", "assistant", "intern", "trainee"]):
+            score += 20
+        return score
+
+    return max(candidates, key=_score) if candidates else ""
+
+def _extract_main_text_block(soup) -> str:
+    for sel in ["main", "article", "[role='main']"]:
+        try:
+            el = soup.select_one(sel)
+            if el:
+                txt = clean_text(el.get_text(" ", strip=True))
+                if len(txt) > 120:
+                    return txt[:4000]
+        except Exception:
+            pass
+
+    body = soup.body or soup
+    txt = clean_text(body.get_text(" ", strip=True))
+    return txt[:4000]
+
+def _extract_single_job_from_page(source: dict, soup, page_url: str):
+    jsonld = _extract_jsonld_jobposting(soup)
+    meta_desc = _safe_meta_content(soup, {"name": "description"}) or _safe_meta_content(soup, {"property": "og:description"})
+    title = jsonld["title"] or _extract_best_h1_h2_title(soup)
+    body = clean_text(" ".join(filter(None, [
+        jsonld["description"],
+        meta_desc,
+        _extract_main_text_block(soup),
+    ])))
+    location = jsonld["location"] or detect_location(f"{title} {body} {page_url}", company=source["company"])
+
+    if jsonld["has_jobposting"]:
+        return [{
+            "title": title or source["name"],
+            "company": source["company"],
+            "location": location,
+            "url": canonicalize_url(page_url),
+            "body": body[:2000],
+        }]
+
+    if not _looks_like_single_job_page(title, body, page_url):
+        return []
+
+    return [{
+        "title": title or source["name"],
+        "company": source["company"],
+        "location": location,
+        "url": canonicalize_url(page_url),
+        "body": body[:2000],
+    }]
+
+def _extract_board_cards_from_soup(source: dict, soup):
+    jobs = []
+    seen = set()
+
+    card_selectors = [
+        "article", "li", ".job", ".job-card", ".job-item", ".vacancy",
+        ".listing", ".role", ".search-result", ".result", ".post"
+    ]
+
+    cards = []
+    for sel in card_selectors:
+        try:
+            cards.extend(soup.select(sel))
+        except Exception:
+            pass
+
+    if len(cards) < 5:
+        cards = soup.find_all("a", href=True)
+
+    for card in cards:
+        try:
+            text = clean_text(card.get_text(" ", strip=True))
+        except Exception:
+            continue
+        low_text = normalize_text(text)
+
+        if len(text) < 20:
+            continue
+        if any(b in low_text for b in ["cookie", "privacy", "terms", "navigation", "subscribe"]):
+            continue
+        if not any(h in low_text for h in _SINGLE_JOB_TITLE_HINTS):
+            continue
+
+        href = ""
+        if getattr(card, "name", None) == "a":
+            href = card.get("href", "")
+        else:
+            a = card.find("a", href=True)
+            href = a.get("href", "") if a else ""
+
+        full_url = canonicalize_url(urljoin(source["url"], href)) if href else canonicalize_url(source["url"])
+        if not full_url:
+            continue
+        if is_malformed_url(full_url):
+            continue
+
+        title = ""
+        if hasattr(card, "find_all"):
+            title = _extract_best_h1_h2_title(card)
+        if not title:
+            lines = [clean_text(x) for x in re.split(r"[•\n\r]+", text) if clean_text(x)]
+            title = lines[0] if lines else source["name"]
+
+        low_title = normalize_text(title)
+        if low_title in _GENERIC_INDEX_PAGE_TITLES:
+            continue
+        if not any(h in low_title or h in low_text for h in _SINGLE_JOB_TITLE_HINTS):
+            continue
+
+        key = short_hash(full_url, title)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        jobs.append({
+            "title": title,
+            "company": source["company"],
+            "location": detect_location(f"{title} {text} {full_url}", company=source["company"]),
+            "url": full_url,
+            "body": text[:1500],
+        })
+
+    return jobs
+
+# Override parse_html with broader single-page + board-aware behaviour
+def parse_html(source: dict):
+    try:
+        html = fetch_text(source["url"])
+        soup = BeautifulSoup(html, "html.parser")
+        discovered = discover_ats_sources_from_html(source, html)
+
+        # A) If the source page itself is a single job page, accept it directly
+        single_jobs = _extract_single_job_from_page(source, soup, source["url"])
+        if single_jobs:
+            return single_jobs, discovered
+
+        # B) Existing generic extraction
+        jobs = generic_extract_jobs_from_soup(source, soup)
+
+        # C) Board/card-style extraction fallback for broader-market pages
+        if not jobs:
+            jobs = _extract_board_cards_from_soup(source, soup)
+
+        return jobs, discovered
+
+    except requests.exceptions.Timeout:
+        raise RuntimeError("timeout")
+    except requests.exceptions.HTTPError as e:
+        raise RuntimeError(f"http_error:{e.response.status_code if e.response else '?'}")
+
+# Slightly broader keyword matching: title + body + URL
+def title_keyword_match(job: CanonicalJob):
+    title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
+    if any(ex in title_hay for ex in get_excludes()):
+        return False, None
+
+    full_hay = normalize_text(f"{job.title} {job.description_text or ''} {job.apply_url or ''}")
+    matched = next((kw for kw in get_keywords() if kw in full_hay), None)
+    return (True, matched) if matched else (False, None)
+
+# Broader role explanations
+def explain_role(title: str) -> str:
+    low = normalize_text(title)
+
+    if "production coordinator" in low:
+        return (
+            "Production Coordinator\n\n"
+            "Typical responsibilities include:\n"
+            "• helping manage schedules\n"
+            "• coordinating teams and deliveries\n"
+            "• supporting producers across a project\n\n"
+            "This is a common early-career role in VFX and post-production."
+        )
+
+    if "production assistant" in low:
+        return (
+            "Production Assistant\n\n"
+            "Typical responsibilities include:\n"
+            "• supporting the production team day to day\n"
+            "• handling admin, logistics and organisation\n"
+            "• helping projects run smoothly\n\n"
+            "This is a common entry route into production."
+        )
+
+    if "runner" in low:
+        return (
+            "Runner\n\n"
+            "Typical responsibilities include:\n"
+            "• helping the studio with day-to-day support tasks\n"
+            "• assisting teams, bookings and office operations\n"
+            "• getting exposure to how production works\n\n"
+            "Runner roles are often an early step into post-production and VFX."
+        )
+
+    if "assistant producer" in low:
+        return (
+            "Assistant Producer\n\n"
+            "Typical responsibilities include:\n"
+            "• supporting producers with planning and coordination\n"
+            "• helping manage timelines and communication\n"
+            "• assisting with delivery and client-facing admin\n\n"
+            "This can be a good progression role after assistant or coordinator work."
+        )
+
+    if "team assistant" in low:
+        return (
+            "Team Assistant\n\n"
+            "Typical responsibilities include:\n"
+            "• supporting a team with coordination and admin\n"
+            "• managing schedules, meetings and organisation\n"
+            "• helping day-to-day operations run smoothly\n\n"
+            "Depending on the team, this can be a relevant entry path into production."
+        )
+
+    if "post production" in low:
+        return (
+            "Post Production role\n\n"
+            "This role likely supports editing, finishing, delivery or post-production operations.\n\n"
+            "Typical responsibilities include:\n"
+            "• coordinating deliveries and schedules\n"
+            "• helping the post team stay organised\n"
+            "• supporting day-to-day operations\n\n"
+            "This can be a strong entry route into post-production."
+        )
+
+    return (
+        f"{title.title()}\n\n"
+        "This looks like a production-support opportunity.\n"
+        "It likely involves organisation, coordination, and helping projects or teams run smoothly.\n\n"
+        "It may be relevant as an early-career route into VFX, animation or post-production."
+    )
+
 # ── Startup ────────────────────────────────────────────────────────────────────
 
 init_db()
