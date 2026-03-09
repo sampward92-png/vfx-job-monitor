@@ -111,31 +111,31 @@ NON_UK_TERMS = [
 ]
 
 DEFAULT_SOURCES = [
-{“name”: “Framestore Careers”,      “company”: “Framestore”,                  “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.framestore.com/careers”},
-{“name”: “Framestore Recruitee”,    “company”: “Framestore”,                  “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://framestore.recruitee.com/”},
-{“name”: “DNEG Open Positions”,     “company”: “DNEG”,                        “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.dneg.com/join-us/open-positions”},
-{“name”: “DNEG Jobvite”,            “company”: “DNEG”,                        “kind”: “studio”,         “priority”: 1, “type”: “jobvite”,    “url”: “https://jobs.jobvite.com/double-negative-visual-effects/jobs”},
-{“name”: “Cinesite Job Vacancies”,  “company”: “Cinesite”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://cinesite.com/job-vacancies/”},
-{“name”: “Blue Zoo Careers”,        “company”: “Blue Zoo”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://careers.blue-zoo.co.uk/vacancies/vacancy-search-results.aspx?view=grid”},
-{“name”: “Jellyfish Workable”,      “company”: “Jellyfish Pictures”,          “kind”: “studio”,         “priority”: 1, “type”: “workable”,   “url”: “https://apply.workable.com/jellyfish-pictures-ltd/”},
-{“name”: “Nexus Studios Workable”,  “company”: “Nexus Studios”,              “kind”: “studio”,         “priority”: 1, “type”: “workable”,   “url”: “https://apply.workable.com/nexusstudios/”},
-{“name”: “Nexus Teamtailor”,        “company”: “Nexus Studios”,              “kind”: “studio”,         “priority”: 1, “type”: “teamtailor”, “url”: “https://nexusstudios.teamtailor.com/jobs”},
-{“name”: “ILM Careers”,             “company”: “ILM”,                         “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.ilm.com/careers/”},
-{“name”: “Milk Careers”,            “company”: “Milk”,                        “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.milk-vfx.com/careers/”},
-{“name”: “BlueBolt Hiring”,         “company”: “BlueBolt”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.blue-bolt.com/hiring”},
-{“name”: “Outpost Careers”,         “company”: “Outpost”,                     “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://careers.outpost-vfx.com/”},
-{“name”: “MPC Careers”,             “company”: “MPC”,                         “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.moving-picture.com/careers”},
-{“name”: “The Mill Careers”,        “company”: “The Mill”,                    “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.themill.com/careers”},
-{“name”: “Absolute Careers”,        “company”: “Absolute”,                    “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://absolute.tv/careers”},
-{“name”: “Coffee & TV Careers”,     “company”: “Coffee & TV”,                 “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.coffeeand.tv/careers”},
-{“name”: “Envy Careers”,            “company”: “Envy”,                        “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.envypost.co.uk/careers”},
-{“name”: “Lola Post Careers”,       “company”: “Lola”,                        “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.lola-post.com/careers”},
-{“name”: “ScreenSkills Jobs”,       “company”: “ScreenSkills”,                “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.screenskills.com/jobs/”},
-{“name”: “Electric Theatre Careers”,“company”: “Electric Theatre Collective”, “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://electrictheatre.tv/careers”},
-{“name”: “Untold Studios Teamtailor”,“company”: “Untold Studios”,             “kind”: “studio”,         “priority”: 2, “type”: “teamtailor”, “url”: “https://careers.untoldstudios.tv/jobs”},
-{“name”: “Untold Studios Careers”,  “company”: “Untold Studios”,             “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://untoldstudios.tv/careers/”},
-{“name”: “Animation UK Jobs”,       “company”: “Animation UK”,                “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.animationuk.org/subpages/job-vacancies/”},
-{“name”: “UK Screen Alliance Jobs”, “company”: “UK Screen Alliance”,          “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.ukscreenalliance.co.uk/subpages/job-vacancies/”},
+{“name”: “Framestore Careers”,       “company”: “Framestore”,                  “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.framestore.com/careers”},
+{“name”: “Framestore Recruitee”,     “company”: “Framestore”,                  “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://framestore.recruitee.com/”},
+{“name”: “DNEG Open Positions”,      “company”: “DNEG”,                        “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.dneg.com/join-us/open-positions”},
+{“name”: “DNEG Jobvite”,             “company”: “DNEG”,                        “kind”: “studio”,         “priority”: 1, “type”: “jobvite”,    “url”: “https://jobs.jobvite.com/double-negative-visual-effects/jobs”},
+{“name”: “Cinesite Job Vacancies”,   “company”: “Cinesite”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://cinesite.com/job-vacancies/”},
+{“name”: “Blue Zoo Careers”,         “company”: “Blue Zoo”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://careers.blue-zoo.co.uk/vacancies/vacancy-search-results.aspx?view=grid”},
+{“name”: “Jellyfish Workable”,       “company”: “Jellyfish Pictures”,          “kind”: “studio”,         “priority”: 1, “type”: “workable”,   “url”: “https://apply.workable.com/jellyfish-pictures-ltd/”},
+{“name”: “Nexus Studios Workable”,   “company”: “Nexus Studios”,               “kind”: “studio”,         “priority”: 1, “type”: “workable”,   “url”: “https://apply.workable.com/nexusstudios/”},
+{“name”: “Nexus Teamtailor”,         “company”: “Nexus Studios”,               “kind”: “studio”,         “priority”: 1, “type”: “teamtailor”, “url”: “https://nexusstudios.teamtailor.com/jobs”},
+{“name”: “ILM Careers”,              “company”: “ILM”,                         “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.ilm.com/careers/”},
+{“name”: “Milk Careers”,             “company”: “Milk”,                        “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.milk-vfx.com/careers/”},
+{“name”: “BlueBolt Hiring”,          “company”: “BlueBolt”,                    “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://www.blue-bolt.com/hiring”},
+{“name”: “Outpost Careers”,          “company”: “Outpost”,                     “kind”: “studio”,         “priority”: 1, “type”: “html”,       “url”: “https://careers.outpost-vfx.com/”},
+{“name”: “MPC Careers”,              “company”: “MPC”,                         “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.moving-picture.com/careers”},
+{“name”: “The Mill Careers”,         “company”: “The Mill”,                    “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.themill.com/careers”},
+{“name”: “Absolute Careers”,         “company”: “Absolute”,                    “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://absolute.tv/careers”},
+{“name”: “Coffee & TV Careers”,      “company”: “Coffee & TV”,                 “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.coffeeand.tv/careers”},
+{“name”: “Envy Careers”,             “company”: “Envy”,                        “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.envypost.co.uk/careers”},
+{“name”: “Lola Post Careers”,        “company”: “Lola”,                        “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://www.lola-post.com/careers”},
+{“name”: “ScreenSkills Jobs”,        “company”: “ScreenSkills”,                “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.screenskills.com/jobs/”},
+{“name”: “Electric Theatre Careers”, “company”: “Electric Theatre Collective”, “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://electrictheatre.tv/careers”},
+{“name”: “Untold Studios Teamtailor”,“company”: “Untold Studios”,              “kind”: “studio”,         “priority”: 2, “type”: “teamtailor”, “url”: “https://careers.untoldstudios.tv/jobs”},
+{“name”: “Untold Studios Careers”,   “company”: “Untold Studios”,              “kind”: “studio”,         “priority”: 2, “type”: “html”,       “url”: “https://untoldstudios.tv/careers/”},
+{“name”: “Animation UK Jobs”,        “company”: “Animation UK”,                “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.animationuk.org/subpages/job-vacancies/”},
+{“name”: “UK Screen Alliance Jobs”,  “company”: “UK Screen Alliance”,          “kind”: “industry_board”, “priority”: 3, “type”: “html”,       “url”: “https://www.ukscreenalliance.co.uk/subpages/job-vacancies/”},
 ]
 
 ATS_PATTERNS = {
@@ -203,7 +203,6 @@ return ats_type
 return None
 
 def is_allowed_html_link(source: dict, full_url: str) -> bool:
-“”“Keep same-domain links and known ATS links. Drop off-domain noise and brochure pages.”””
 if not full_url or is_malformed_url(full_url):
 return False
 parsed = urlparse(full_url)
@@ -339,7 +338,6 @@ cur.execute("""
     )
 """)
 
-# Safe column migrations for existing deployments
 existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
 for col, defn in [
     ("miss_count",           "INTEGER DEFAULT 0"),
@@ -423,7 +421,6 @@ cur.execute("""
         status                TEXT DEFAULT 'unknown'
     )
 """)
-# Safe migrations for source_health
 sh_cols = {r[1] for r in conn.execute("PRAGMA table_info(source_health)").fetchall()}
 for col, defn in [("last_event_type", "TEXT"), ("consecutive_successes", "INTEGER DEFAULT 0")]:
     if col not in sh_cols:
@@ -445,7 +442,6 @@ cur.execute("""
     )
 """)
 
-# Indexes
 for idx in [
     "CREATE INDEX IF NOT EXISTS idx_jobs_unique_key  ON jobs(unique_key)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_status      ON jobs(job_status)",
@@ -465,18 +461,14 @@ seed_defaults()
 ```
 
 def seed_defaults():
-# Always insert missing keywords — handles new additions on redeploy
 for kw in DEFAULT_KEYWORDS:
 db_execute(“INSERT OR IGNORE INTO keywords (keyword) VALUES (?)”, (kw,))
-# Always insert missing excludes — handles new additions on redeploy
 for phrase in DEFAULT_EXCLUDES:
 db_execute(“INSERT OR IGNORE INTO excludes (phrase) VALUES (?)”, (phrase,))
 
 ```
 if not get_state("location_mode"): set_state("location_mode", "london")
 if not get_state("paused"):        set_state("paused", "0")
-# !! quality_mode defaults to "off" — sources are pre-filtered VFX studios,
-#    scoring adds no value at this stage. Change via /quality when needed.
 if not get_state("quality_mode"):  set_state("quality_mode", "off")
 
 existing_sources = {
@@ -501,7 +493,6 @@ return [{“name”: r[0], “company”: r[1], “kind”: r[2], “priority”
 for r in (rows or [])]
 
 def save_discovered_sources(parent_source: dict, discovered: list) -> int:
-“”“Persist newly-discovered ATS sources for later review via /discoveries.”””
 if not discovered:
 return 0
 new_count = 0
@@ -556,7 +547,7 @@ return True, f”Approved and added: {source_name}”
 
 def reject_discovery(discovery_id: int) -> tuple[bool, str]:
 row = db_execute(“SELECT id, status FROM discovered_sources WHERE id=?”, (discovery_id,), fetch=True)
-if not row:              return False, “Discovery not found.”
+if not row:               return False, “Discovery not found.”
 if row[0][1] == “rejected”: return False, “Already rejected.”
 if row[0][1] == “approved”: return False, “Already approved.”
 db_execute(“UPDATE discovered_sources SET status=‘rejected’, reviewed_at=? WHERE id=?”, (now_str(), discovery_id))
@@ -565,10 +556,10 @@ return True, f”Rejected discovery #{discovery_id}.”
 def format_discoveries(limit: int = 12) -> str:
 rows = pending_discoveries(limit)
 if not rows:
-return “🧭 No pending ATS discoveries.”
-lines = [“🧭 Pending ATS discoveries”]
+return “No pending ATS discoveries.”
+lines = [“Pending ATS discoveries”]
 for d_id, company, source_name, ats_type, candidate_url, discovered_from, created_at in rows:
-lines += [””, f”{d_id}. {company} — {ats_type}”, f”   {source_name}”]
+lines += [””, f”{d_id}. {company} – {ats_type}”, f”   {source_name}”]
 if discovered_from: lines.append(f”   Found on: {discovered_from}”)
 lines += [f”   {candidate_url}”, f”   Added: {created_at}”]
 lines += [””, “Use /approve_source <id> or /reject_source <id>.”]
@@ -766,16 +757,13 @@ blob    = f”{title} {body}”
 bd = {}
 
 ```
-# Title strength
 title_pts = max((pts for phrase, pts in TITLE_BOOSTS.items() if phrase in title), default=0)
 bd["title_strength"] = title_pts
 
-# Juniority signals
 juniority_terms = ["junior", "graduate", "assistant", "trainee", "intern", "entry level",
                    "no experience", "recent graduate", "entry-level", "school leaver"]
 bd["juniority"] = min(sum(6 for t in juniority_terms if t in blob), 30)
 
-# Location confidence — check location_raw only for Non-UK penalty (avoids body text false positives)
 loc_raw_hay = normalize_text(job.location_raw or "")
 if any(t in loc_raw_hay for t in NON_UK_TERMS):
     loc_pts = -100
@@ -789,7 +777,6 @@ else:
     loc_pts = 0
 bd["location_confidence"] = loc_pts
 
-# Source quality
 if job.source_kind == "studio":
     p = job.source_priority
     source_pts = 20 if p == 1 else (14 if p == 2 else 8)
@@ -799,14 +786,11 @@ else:
     source_pts = 0
 bd["source_quality"] = source_pts
 
-# ATS type bonus
 bd["ats_type"] = (8 if job.ats_type in {"greenhouse", "lever", "ashby", "workable"} else
                   5 if job.ats_type in {"jobvite", "teamtailor"} else 0)
 
-# Company tier
 bd["company_tier"] = 10 if company in PREFERRED_COMPANIES else 0
 
-# Negative indicators
 neg_terms = ["senior", "lead", "director", "supervisor", "executive producer",
              "principal", "recruiter", "software engineer", "technical director", " td "]
 bd["negative_indicators"] = max(sum(-40 for t in neg_terms if t in blob), -100)
@@ -820,28 +804,24 @@ return float(total), bd
 
 def detect_location(text: str, company: str = “”) -> str:
 hay = normalize_text(text)
-if any(t in hay for t in NON_UK_TERMS):     return “Non-UK”
-if any(t in hay for t in LONDON_TERMS):      return “London”
-if any(t in hay for t in UK_TERMS):          return “UK”
-if company in UK_STUDIO_COMPANIES:           return “Unknown-UK-Studio”
+if any(t in hay for t in NON_UK_TERMS):  return “Non-UK”
+if any(t in hay for t in LONDON_TERMS):  return “London”
+if any(t in hay for t in UK_TERMS):      return “UK”
+if company in UK_STUDIO_COMPANIES:       return “Unknown-UK-Studio”
 return “”
 
 def location_allowed(job: CanonicalJob) -> bool:
 mode = get_state(“location_mode”, “off”).lower()
 if mode == “off”:
 return True
-# Non-UK hard reject — only check location_raw, NOT full description
-# (studio pages mention global offices in body text)
 if detect_location(job.location_raw or “”, company=job.company) == “Non-UK”:
 return False
-# Positive detection: title + location + company
 blob = “ “.join(filter(None, [job.title, job.location_raw, job.company]))
 loc  = detect_location(blob, company=job.company)
 if loc == “London”:
 return True
 if mode == “uk” and loc == “UK”:
 return True
-# Known London VFX studio — trust it unconditionally
 if job.source_kind == “studio” and job.company in UK_STUDIO_COMPANIES:
 return True
 return False
@@ -854,7 +834,6 @@ matched = next((kw for kw in get_keywords() if kw in hay), None)
 return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
-“”“Debug helper — returns first filter that drops this job, or ‘passed’.”””
 hay = normalize_text(f”{job.title} {job.description_text or ‘’}”)
 if any(ex in hay for ex in get_excludes()):
 return “excluded”
@@ -881,44 +860,36 @@ def opportunity_label(job: CanonicalJob) -> str:
 return “Programme / internship” if classify_opportunity(job) == “programme” else “Direct role”
 
 def prettify_location(loc: Optional[str]) -> str:
-if not loc:                        return “Location not listed”
-if loc == “Unknown-UK-Studio”:     return “UK studio (location not explicit)”
+if not loc:                    return “Location not listed”
+if loc == “Unknown-UK-Studio”: return “UK studio (location not explicit)”
 return loc
 
 # ── Help text ──────────────────────────────────────────────────────────────────
 
 def format_help_text() -> str:
 return (
-“🎬 VFX Job Monitor\n\n”
+“VFX Job Monitor\n\n”
 “Checks VFX, animation and post-production hiring sources for entry-level production roles.\n\n”
-“──────────\n”
 “Core commands\n”
-“──────────\n”
-“🚀 /scan — Run a fresh scan now\n”
-“🗂️ /jobs — Browse saved active matches\n”
-“✨ /latest — Jobs found in the last 24 hours\n”
-“🔎 /search <term> — Search by title or company\n”
-“🧭 /status — Bot status and settings\n”
-“❓ /help — This guide\n\n”
-“──────────\n”
+“/scan – Run a fresh scan now\n”
+“/jobs – Browse saved active matches\n”
+“/latest – Jobs found in the last 24 hours\n”
+“/search <term> – Search by title or company\n”
+“/status – Bot status and settings\n”
+“/help – This guide\n\n”
 “Settings\n”
-“──────────\n”
-“📍 /setlocation london|uk|off\n”
-“🎚️ /quality strict|normal|off\n”
-“🧩 /keywords — Show keyword list\n”
-“➕ /addkeyword <phrase>\n”
-“➖ /removekeyword <phrase>\n\n”
-“──────────\n”
+“/setlocation london|uk|off\n”
+“/quality strict|normal|off\n”
+“/keywords – Show keyword list\n”
+“/addkeyword <phrase>\n”
+“/removekeyword <phrase>\n\n”
 “Control\n”
-“──────────\n”
-“⏸️ /pause — Pause scheduled monitoring\n”
-“▶️ /resume — Resume monitoring\n\n”
-“──────────\n”
+“/pause – Pause scheduled monitoring\n”
+“/resume – Resume monitoring\n\n”
 “Alert labels\n”
-“──────────\n”
-“🎯 Direct role — likely a real vacancy\n”
-“🎓 Programme / internship — scheme or work experience\n\n”
-“Tip: start with 🚀 /scan”
+“Direct role – likely a real vacancy\n”
+“Programme / internship – scheme or work experience\n\n”
+“Tip: start with /scan”
 )
 
 # ── Scraping ───────────────────────────────────────────────────────────────────
@@ -953,7 +924,6 @@ discovered.append({
 return discovered
 
 def _best_job_container(a):
-“”“Walk up the DOM to find the most useful job card container.”””
 for parent in a.parents:
 if not getattr(parent, “name”, None):
 continue
@@ -968,7 +938,6 @@ return parent
 return a.parent or a
 
 def _extract_title_and_context(a):
-“”“Extract the best job title and richest context from a link’s surroundings.”””
 container   = _best_job_container(a)
 anchor_text = clean_text(a.get_text(” “, strip=True))
 candidates  = [anchor_text] if anchor_text else []
@@ -1097,12 +1066,12 @@ except Exception:
 pass
 return parse_html(source)
 
-def parse_workable(source):      return parse_html(source)
-def parse_ashby(source):         return parse_html(source)
-def parse_jobvite(source):       return parse_html(source)
-def parse_teamtailor(source):    return parse_html(source)
+def parse_workable(source):        return parse_html(source)
+def parse_ashby(source):           return parse_html(source)
+def parse_jobvite(source):         return parse_html(source)
+def parse_teamtailor(source):      return parse_html(source)
 def parse_smartrecruiters(source): return parse_html(source)
-def parse_workday(source):       return parse_html(source)
+def parse_workday(source):         return parse_html(source)
 
 def fetch_source_jobs(source: dict):
 t = source[“type”]
@@ -1156,10 +1125,10 @@ if not existing:
     record_job_event(unique_key, "created", job.source_name, None, new_snapshot)
     return True, unique_key
 
-row             = existing[0]
+row              = existing[0]
 current_priority = row[1]
-old_snapshot    = job_event_snapshot_from_db_row(row[2:])
-was_expired     = (old_snapshot.get("job_status") == "expired")
+old_snapshot     = job_event_snapshot_from_db_row(row[2:])
+was_expired      = (old_snapshot.get("job_status") == "expired")
 
 if int(job.source_priority) < int(current_priority):
     db_execute(
@@ -1198,7 +1167,6 @@ return False, unique_key
 # ── Core monitoring run ────────────────────────────────────────────────────────
 
 def collect_and_store_jobs(force: bool = False) -> list:
-“”“Parallel scrape of all active sources. force=True returns existing matches too (/scan).”””
 sources      = get_active_sources()
 threshold    = quality_threshold()
 all_matched  = []
@@ -1217,8 +1185,8 @@ def _scrape_one(source):
         err    = str(e)
         etype  = "timeout" if "timeout" in err.lower() else "parse_error"
         fails, _ = record_source_failure(source["name"], err[:200], etype)
-        if fails == 3: send_telegram_message(f"⚠️ Source degraded: {source['name']}")
-        elif fails == 7: send_telegram_message(f"🔴 Source dead: {source['name']}")
+        if fails == 3: send_telegram_message(f"Source degraded: {source['name']}")
+        elif fails == 7: send_telegram_message(f"Source dead: {source['name']}")
         return source, [], err
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -1241,7 +1209,6 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             job.score_breakdown = breakdown
             blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
             job.location_normalized = detect_location(blob, company=job.company) or None
-            # Hard drop — Non-UK or zero score
             if job.location_normalized == "Non-UK" or total_score <= 0:
                 continue
             if total_score < threshold:
@@ -1293,8 +1260,8 @@ bd         = job.score_breakdown or {}
 loc        = prettify_location(job.location_raw or job.location_normalized)
 kind       = classify_opportunity(job)
 kind_label = opportunity_label(job)
-header     = (“🎓 Programme” if kind == “programme” else
-“🎯 HIGH PRIORITY” if (job.score or 0) >= 75 else “🎯 Role”)
+header     = (“Programme” if kind == “programme” else
+“HIGH PRIORITY” if (job.score or 0) >= 75 else “Role”)
 
 ```
 reasons = []
@@ -1308,31 +1275,31 @@ for pts, label in [
 ]:
     if pts > 0: reasons.append(f"+ {label} (+{pts})")
 negs = bd.get("negative_indicators", 0)
-if negs < 0: reasons.append(f"− negative signals ({negs})")
+if negs < 0: reasons.append(f"- negative signals ({negs})")
 
-lines = [header, f"{job.company} — {job.title}",
-         f"Type: {kind_label}", f"📍 {loc}", f"⭐ Score: {int(job.score or 0)}"]
+lines = [header, f"{job.company} -- {job.title}",
+         f"Type: {kind_label}", f"Location: {loc}", f"Score: {int(job.score or 0)}"]
 if reasons:
     lines += ["", "Why it matched:"] + [f"  {r}" for r in reasons[:6]]
 if job.source_type:
-    lines += ["", f"📡 Source: {job.source_name} ({job.ats_type or job.source_type})"]
+    lines += ["", f"Source: {job.source_name} ({job.ats_type or job.source_type})"]
 if job.apply_url:
-    lines.append(f"🔗 {job.apply_url}")
+    lines.append(f"{job.apply_url}")
 return "\n".join(lines)
 ```
 
 def format_job_rows(rows) -> str:
 if not rows:
-return “📭 No active matches yet. Run /scan to check live sources now.”
-lines = [“🗂️ Active jobs”]
+return “No active matches yet. Run /scan to check live sources now.”
+lines = [“Active jobs”]
 for idx, (title, company, loc, url, first_seen, score) in enumerate(rows[:10], 1):
 loc_text = prettify_location(loc) if loc else None
 lines.append(f”\n{idx}. {title}”)
-lines.append(f”   🏢 {company}”)
-if loc_text: lines.append(f”   📍 {loc_text}”)
-lines.append(f”   ⭐ Score {int(score)}”)
-lines.append(f”   🕘 First seen {first_seen}”)
-lines.append(f”   🔗 {url}”)
+lines.append(f”   {company}”)
+if loc_text: lines.append(f”   {loc_text}”)
+lines.append(f”   Score {int(score)}”)
+lines.append(f”   First seen {first_seen}”)
+lines.append(f”   {url}”)
 return “\n”.join(lines)
 
 def latest_rows(hours=24, limit=10):
@@ -1353,7 +1320,7 @@ if key not in seen: seen.add(key); deduped.append(job)
 
 ```
 deduped.sort(key=lambda j: (classify_opportunity(j) == "programme", -(j.score or 0), j.company))
-qt   = quality_threshold()
+qt           = quality_threshold()
 high         = [j for j in deduped if classify_opportunity(j) != "programme" and (j.score or 0) >= 75]
 normal_roles = [j for j in deduped if classify_opportunity(j) != "programme" and qt <= (j.score or 0) < 75]
 programmes   = [j for j in deduped if classify_opportunity(j) == "programme" and (j.score or 0) >= qt]
@@ -1363,17 +1330,17 @@ for job in high[:6]:
 
 summary = []
 if normal_roles and get_state("quality_mode", "off").lower() != "strict":
-    summary.append(f"📋 {len(normal_roles)} more role{'s' if len(normal_roles)!=1 else ''}:")
+    summary.append(f"{len(normal_roles)} more role{'s' if len(normal_roles)!=1 else ''}:")
     for job in normal_roles[:6]:
         loc_part = f" | {prettify_location(job.location_raw or job.location_normalized)}"
-        summary += [f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})", f"  {job.apply_url}"]
+        summary += [f"- {job.title} -- {job.company}{loc_part} (score: {int(job.score or 0)})", f"  {job.apply_url}"]
 
 if programmes and get_state("quality_mode", "off").lower() != "strict":
     if summary: summary.append("")
-    summary.append(f"🎓 {len(programmes)} programme signal{'s' if len(programmes)!=1 else ''}:")
+    summary.append(f"{len(programmes)} programme signal{'s' if len(programmes)!=1 else ''}:")
     for job in programmes[:4]:
         loc_part = f" | {prettify_location(job.location_raw or job.location_normalized)}"
-        summary += [f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})", f"  {job.apply_url}"]
+        summary += [f"- {job.title} -- {job.company}{loc_part} (score: {int(job.score or 0)})", f"  {job.apply_url}"]
 
 if summary: send_telegram_message("\n".join(summary))
 ```
@@ -1395,13 +1362,13 @@ if lower.startswith("/approve_source "):
     raw_id = clean_text(text[len("/approve_source "):])
     if not raw_id.isdigit(): return "Use: /approve_source <id>"
     ok, msg = approve_discovery(int(raw_id))
-    return ("✅ " + msg) if ok else ("⚠️ " + msg)
+    return ("OK: " + msg) if ok else ("Error: " + msg)
 
 if lower.startswith("/reject_source "):
     raw_id = clean_text(text[len("/reject_source "):])
     if not raw_id.isdigit(): return "Use: /reject_source <id>"
     ok, msg = reject_discovery(int(raw_id))
-    return ("✅ " + msg) if ok else ("⚠️ " + msg)
+    return ("OK: " + msg) if ok else ("Error: " + msg)
 
 if lower == "/showall":
     rows = db_execute(
@@ -1413,7 +1380,7 @@ if lower == "/showall":
     if not rows:
         return "No active jobs yet. Use /scan to trigger a fresh scrape."
     total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-    send_telegram_message(f"📚 Stored matches ({total} total · showing top {min(len(rows),30)} by score)")
+    send_telegram_message(f"Stored matches ({total} total, showing top {min(len(rows),30)} by score)")
     time.sleep(0.3)
     for row in rows[:30]:
         title, company, loc, url, first_seen, score, bd_json, keyword, source_name, ats_type = row
@@ -1424,12 +1391,12 @@ if lower == "/showall":
             ("title_strength", "title"), ("juniority", "junior signal"),
             ("location_confidence", "location"), ("source_quality", "studio source"),
         ] if bd.get(k, 0) > 0]
-        lines = [f"⭐ Score: {int(score or 0)} — {title}", f"🏢 {company}"]
-        if loc:     lines.append(f"📍 {loc}")
-        if keyword: lines.append(f"🔑 Matched: {keyword}")
+        lines = [f"Score: {int(score or 0)} -- {title}", f"{company}"]
+        if loc:     lines.append(f"Location: {loc}")
+        if keyword: lines.append(f"Matched: {keyword}")
         if reasons: lines.append("Why: " + " | ".join(reasons))
-        lines += [f"👁 First seen: {first_seen}", f"📡 {source_name}" + (f" ({ats_type})" if ats_type else "")]
-        if url: lines.append(f"🔗 {url}")
+        lines += [f"First seen: {first_seen}", f"Source: {source_name}" + (f" ({ats_type})" if ats_type else "")]
+        if url: lines.append(url)
         send_telegram_message("\n".join(lines))
         time.sleep(0.4)
     if total > 30:
@@ -1444,7 +1411,7 @@ if lower in {"/scan", "/scandebug"}:
             sources   = get_active_sources()
             threshold = quality_threshold()
             send_telegram_message(
-                f"🔍 Scanning {len(sources)} sources...\n"
+                f"Scanning {len(sources)} sources...\n"
                 f"Location: {get_state('location_mode','london')} | Score threshold: {threshold}"
                 + ("\n[debug mode]" if debug else "")
             )
@@ -1485,11 +1452,11 @@ if lower in {"/scan", "/scandebug"}:
                         continue
 
                     save_discovered_sources(source, discovered)
-                    matched_this = 0
+                    matched_this  = 0
                     reason_counts = {"excluded": 0, "no_keyword": 0, "location": 0, "score": 0}
 
                     for raw in raw_jobs:
-                        job = normalise_to_canonical(raw, source)
+                        job    = normalise_to_canonical(raw, source)
                         reason = classify_rejection(job, threshold)
                         if reason != "passed":
                             reason_counts[reason] += 1
@@ -1515,18 +1482,17 @@ if lower in {"/scan", "/scandebug"}:
             all_matched.sort(key=lambda j: j.score or 0, reverse=True)
 
             if debug:
-                lines = ["📊 Per-source results:"]
+                lines = ["Per-source results:"]
                 for name, raw_c, match_c, err, reason_counts in source_log:
                     if err:
-                        lines.append(f"  ❌ {name}: ERROR — {err}")
+                        lines.append(f"  ERROR {name}: {err}")
                     elif raw_c == 0:
-                        lines.append(f"  🟡 {name}: 0 jobs found")
+                        lines.append(f"  ZERO {name}: 0 jobs found")
                     elif match_c == 0:
                         rsummary = ", ".join(f"{k}={v}" for k, v in (reason_counts or {}).items() if v > 0)
-                        lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed" + (f"\n      {rsummary}" if rsummary else ""))
+                        lines.append(f"  NONE {name}: {raw_c} found, 0 passed" + (f" ({rsummary})" if rsummary else ""))
                     else:
-                        lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
-                # Chunk to stay under Telegram 4096 limit
+                        lines.append(f"  OK   {name}: {raw_c} found, {match_c} matched")
                 chunk, chunks = [], []
                 for line in lines:
                     chunk.append(line)
@@ -1536,28 +1502,27 @@ if lower in {"/scan", "/scandebug"}:
                 for c in chunks:
                     send_telegram_message(c); time.sleep(0.3)
 
-            errors   = sum(1 for _, _, _, e, _ in source_log if e)
-            zero_src = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
-            direct_count     = sum(1 for j in all_matched if classify_opportunity(j) != "programme")
-            programme_count  = sum(1 for j in all_matched if classify_opportunity(j) == "programme")
-            matched_line = (
+            errors        = sum(1 for _, _, _, e, _ in source_log if e)
+            zero_src      = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
+            direct_count  = sum(1 for j in all_matched if classify_opportunity(j) != "programme")
+            prog_count    = sum(1 for j in all_matched if classify_opportunity(j) == "programme")
+            matched_line  = (
                 f"Matched: {len(all_matched)} total"
-                + (f" ({direct_count} direct, {programme_count} programme)" if programme_count
+                + (f" ({direct_count} direct, {prog_count} programme)" if prog_count
                    else f" ({direct_count} direct role{'s' if direct_count!=1 else ''})")
             )
             hint = (
-                f"\nThreshold was {threshold} — try /quality off then /scan to see everything"
+                f"\nThreshold was {threshold} -- try /quality off then /scan to see everything"
                 if not all_matched and errors < len(source_log) else ""
             )
             send_telegram_message(
-                f"✅ Scan complete\n"
+                f"Scan complete\n"
                 f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} zero jobs\n"
                 f"{matched_line}{hint}"
             )
 
             if not all_matched: return
 
-            # Dedupe alerts
             seen_alert, deduped = set(), []
             for job in all_matched:
                 key = build_unique_key(job)
@@ -1567,14 +1532,14 @@ if lower in {"/scan", "/scandebug"}:
             programme_roles = [j for j in deduped if classify_opportunity(j) == "programme"]
 
             if direct_roles:
-                send_telegram_message(f"🎯 Top direct roles ({min(len(direct_roles),10)} shown):")
+                send_telegram_message(f"Top direct roles ({min(len(direct_roles),10)} shown):")
                 for job in direct_roles[:10]:
                     send_telegram_message(format_job_alert(job)); time.sleep(0.5)
                 if len(direct_roles) > 10:
                     send_telegram_message(f"...and {len(direct_roles)-10} more. Use /jobs to see all.")
 
             if programme_roles:
-                send_telegram_message(f"🎓 Programme signals ({min(len(programme_roles),5)} shown):")
+                send_telegram_message(f"Programme signals ({min(len(programme_roles),5)} shown):")
                 for job in programme_roles[:5]:
                     send_telegram_message(format_job_alert(job)); time.sleep(0.5)
                 if len(programme_roles) > 5:
@@ -1582,10 +1547,10 @@ if lower in {"/scan", "/scandebug"}:
 
         except Exception as e:
             import traceback
-            send_telegram_message(f"❌ Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
+            send_telegram_message(f"Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
 
     threading.Thread(target=_run_scan, daemon=True).start()
-    return "⏳ Scan started — results on the way."
+    return "Scan started -- results on the way."
 
 if lower == "/events":
     rows = db_execute(
@@ -1593,14 +1558,14 @@ if lower == "/events":
            FROM job_events ORDER BY id DESC LIMIT 12""",
         fetch=True,
     )
-    if not rows: return "🕘 No job changes recorded yet."
-    icon = {"created": "🆕", "updated": "🔄", "reopened": "♻️", "expired": "⌛"}
-    lines = ["🕘 Recent activity"]
+    if not rows: return "No job changes recorded yet."
+    icon = {"created": "NEW", "updated": "UPD", "reopened": "REOPEN", "expired": "EXP"}
+    lines = ["Recent activity"]
     for etype, eat, sname, old_json, new_json, notes in rows:
         snap    = (json.loads(new_json) if new_json else {}) or (json.loads(old_json) if old_json else {})
         title   = snap.get("title", "Unknown")
         company = snap.get("company", "Unknown")
-        lines.append(f"{icon.get(etype,'•')} {etype.title()} — {company} — {title}")
+        lines.append(f"{icon.get(etype,'?')} {etype.title()} -- {company} -- {title}")
         lines.append(f"  {eat} | {sname or snap.get('source_name','')}")
         if notes: lines.append(f"  {notes}")
     return "\n".join(lines[:40])
@@ -1611,18 +1576,18 @@ if lower == "/status":
     n_src   = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
     paused  = get_state("paused", "0") == "1"
     return (
-        f"🤖 VFX Job Monitor\n\n"
-        f"{'⏸️ Paused' if paused else '▶️ Running'}\n"
-        f"🛰️ Sources: {n_src} active · {healthy} healthy\n"
-        f"🗂️ Active matches: {total}\n"
-        f"📍 Location: {get_state('location_mode','london')}\n"
-        f"🎚️ Quality: {get_state('quality_mode','off')} (threshold {quality_threshold()})\n"
-        f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
-        f"🕘 Last checked: {get_state('last_checked','Never')}\n"
-        f"✨ Matches last run: {get_state('last_match_count','0')}\n\n"
-        f"• 🚀 /scan — fresh results now\n"
-        f"• 🗂️ /jobs — browse saved matches\n"
-        f"• 🧪 /scandebug — per-source diagnostics"
+        f"VFX Job Monitor\n\n"
+        f"{'Paused' if paused else 'Running'}\n"
+        f"Sources: {n_src} active, {healthy} healthy\n"
+        f"Active matches: {total}\n"
+        f"Location: {get_state('location_mode','london')}\n"
+        f"Quality: {get_state('quality_mode','off')} (threshold {quality_threshold()})\n"
+        f"Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
+        f"Last checked: {get_state('last_checked','Never')}\n"
+        f"Matches last run: {get_state('last_match_count','0')}\n\n"
+        f"/scan -- fresh results now\n"
+        f"/jobs -- browse saved matches\n"
+        f"/scandebug -- per-source diagnostics"
     )
 
 if lower == "/jobs":
@@ -1655,30 +1620,30 @@ if lower.startswith("/search "):
     return format_job_rows(rows) if rows else f'No active jobs for "{term}".'
 
 if lower == "/keywords":
-    return "🧩 Keywords\n" + "\n".join(f"• {k}" for k in get_keywords())
+    return "Keywords\n" + "\n".join(f"- {k}" for k in get_keywords())
 
 if lower.startswith("/addkeyword "):
     kw = text[len("/addkeyword "):].strip()
-    add_keyword(kw); return f'➕ Added: "{normalize_text(kw)}"'
+    add_keyword(kw); return f'Added: "{normalize_text(kw)}"'
 
 if lower.startswith("/removekeyword "):
     kw = text[len("/removekeyword "):].strip()
-    remove_keyword(kw); return f'➖ Removed: "{normalize_text(kw)}"'
+    remove_keyword(kw); return f'Removed: "{normalize_text(kw)}"'
 
 if lower == "/companies":
     rows = db_execute(
         "SELECT company, COUNT(*) FROM jobs WHERE job_status='active' GROUP BY company ORDER BY COUNT(*) DESC",
         fetch=True,
     )
-    return ("Companies:\n" + "\n".join(f"- {c} — {n}" for c, n in rows)) if rows else "No active jobs yet."
+    return ("Companies:\n" + "\n".join(f"- {c} ({n})" for c, n in rows)) if rows else "No active jobs yet."
 
 if lower == "/sources":
     rows = db_execute("SELECT name, company, type, kind, active FROM sources ORDER BY priority", fetch=True)
-    return ("Sources:\n" + "\n".join(f"{'✅' if r[4] else '❌'} {r[1]} | {r[2]} | {r[3]}" for r in (rows or []))) or "No sources."
+    return ("Sources:\n" + "\n".join(f"{'ON' if r[4] else 'OFF'} {r[1]} | {r[2]} | {r[3]}" for r in (rows or []))) or "No sources."
 
 if lower == "/health":
     rows = db_execute("SELECT status, COUNT(*) FROM source_health GROUP BY status", fetch=True)
-    if not rows: return "🩺 No health data yet. Run /scan first."
+    if not rows: return "No health data yet. Run /scan first."
     n = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
     return f"Source health ({n} active):\n" + "\n".join(f"  {s}: {c}" for s, c in rows)
 
@@ -1689,30 +1654,30 @@ if lower == "/dead":
            ORDER BY consecutive_fails DESC""",
         fetch=True,
     )
-    if not rows: return "✅ No degraded or dead sources."
+    if not rows: return "No degraded or dead sources."
     lines = []
     for name, fails, evt, error, last_ok in rows:
-        icon = "🔴" if fails >= 7 else ("🟡" if evt == "success_zero" else "⚠️")
-        lines.append(f"{icon} {name}\n  Fails: {fails} | {evt or '?'} | Last OK: {last_ok or 'never'}\n  {(error or '')[:100]}")
+        status_lbl = "DEAD" if fails >= 7 else ("ZERO" if evt == "success_zero" else "WARN")
+        lines.append(f"{status_lbl} {name}\n  Fails: {fails} | {evt or '?'} | Last OK: {last_ok or 'never'}\n  {(error or '')[:100]}")
     return "\n\n".join(lines)
 
 if lower.startswith("/setlocation "):
     mode = lower[len("/setlocation "):].strip()
     if mode not in {"london", "uk", "off"}: return "Use: london, uk, or off"
-    set_state("location_mode", mode); return f"📍 Location set to {mode}"
+    set_state("location_mode", mode); return f"Location set to {mode}"
 
 if lower.startswith("/quality "):
     mode = lower[len("/quality "):].strip()
     if mode not in {"strict", "normal", "off"}: return "Use: strict, normal, or off"
-    set_state("quality_mode", mode); return f"🎚️ Quality set to {mode} (threshold: {quality_threshold()})"
+    set_state("quality_mode", mode); return f"Quality set to {mode} (threshold: {quality_threshold()})"
 
 if lower == "/pause":
-    set_state("paused", "1"); return "⏸️ Monitoring paused."
+    set_state("paused", "1"); return "Monitoring paused."
 
 if lower == "/resume":
-    set_state("paused", "0"); return "▶️ Monitoring resumed."
+    set_state("paused", "0"); return "Monitoring resumed."
 
-return "🤔 Unknown command. Use /help."
+return "Unknown command. Use /help."
 ```
 
 # ── Background threads ─────────────────────────────────────────────────────────
@@ -1758,7 +1723,7 @@ total   = (db_execute(“SELECT COUNT(*) FROM jobs WHERE job_status=‘active’
 sources = (db_execute(“SELECT COUNT(*) FROM sources WHERE active=1”, fetch=True) or [[0]])[0][0]
 healthy = (db_execute(“SELECT COUNT(*) FROM source_health WHERE status=‘healthy’”, fetch=True) or [[0]])[0][0]
 return (
-f”VFX Job Monitor — Phase 2a\n”
+f”VFX Job Monitor – Phase 2a\n”
 f”Active jobs: {total} | Sources: {sources} | Healthy: {healthy}\n”
 f”Last checked: {get_state(‘last_checked’, ‘Never’)}”
 ), 200
@@ -1778,8 +1743,8 @@ _started = True
 threading.Thread(target=monitor_loop, daemon=True).start()
 threading.Thread(target=command_loop, daemon=True).start()
 send_telegram_message(
-“✅ VFX Monitor — Phase 2a live\n”
-“New: ATS discovery engine · job event history · improved HTML extractor\n”
+“VFX Monitor – Phase 2a live\n”
+“ATS discovery engine, job event history, improved HTML extractor\n”
 “Commands: /scan /jobs /discoveries /events /help”
 )
 
