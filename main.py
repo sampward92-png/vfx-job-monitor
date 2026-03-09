@@ -1849,6 +1849,28 @@ def handle_command(text: str) -> str:
                 results.append(f"Framestore HTML: {r.status_code}, starts: {snippet!r:.120}")
             except Exception as e:
                 results.append(f"Framestore FAIL: {type(e).__name__}: {str(e)[:80]}")
+            # Test 4: check keywords table
+            try:
+                kws = get_keywords()
+                results.append(f"Keywords in DB: {len(kws)}, sample: {kws[:3]}")
+            except Exception as e:
+                results.append(f"Keywords FAIL: {e}")
+            # Test 5: simulate matching on a known title
+            try:
+                test_title = "production coordinator"
+                kws = get_keywords()
+                matched = next((k for k in kws if k in test_title), None)
+                results.append(f"Match test 'production coordinator': {matched!r}")
+            except Exception as e:
+                results.append(f"Match test FAIL: {e}")
+            # Test 6: fetch Framestore and show raw job titles found
+            try:
+                src = next(s for s in get_active_sources() if "Framestore Careers" in s["name"])
+                raw_jobs, _ = fetch_source_jobs(src)
+                titles = [j.get("title","?") for j in raw_jobs[:6]]
+                results.append(f"Framestore raw titles ({len(raw_jobs)}): {titles}")
+            except Exception as e:
+                results.append(f"Framestore titles FAIL: {e}")
             send_telegram_message("🔬 Diagnostics:\n" + "\n".join(results))
         threading.Thread(target=_diag, daemon=True).start()
         return "Running diagnostics..."
