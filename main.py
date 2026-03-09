@@ -124,7 +124,7 @@ DISCOVERY_BLOCKED_DOMAINS = {
 
 DEFAULT_SOURCES = [
     {"name": "Framestore Careers",       "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.framestore.com/careers"},
-    {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://framestore.recruitee.com/"},
+    {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "recruitee",  "url": "https://framestore.recruitee.com/"},
     {"name": "DNEG Open Positions",      "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/dneg"},
     {"name": "DNEG Jobvite",             "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs"},
     {"name": "Cinesite Job Vacancies",   "company": "Cinesite",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://cinesite.com/job-vacancies/"},
@@ -135,7 +135,7 @@ DEFAULT_SOURCES = [
     {"name": "ILM Careers",              "company": "ILM",                         "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.ilm.com/careers/"},
     {"name": "Milk Careers",             "company": "Milk",                        "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.milk-vfx.com/careers/"},
     {"name": "BlueBolt Hiring",          "company": "BlueBolt",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.blue-bolt.com/hiring"},
-    {"name": "Outpost Careers",          "company": "Outpost",                     "kind": "studio",         "priority": 1, "type": "html",       "url": "https://careers.outpost-vfx.com/"},
+    {"name": "Outpost Careers",          "company": "Outpost",                     "kind": "studio",         "priority": 1, "type": "greenhouse", "url": "https://careers.outpost-vfx.com/"},
     {"name": "Coffee & TV Careers",      "company": "Coffee & TV",                 "kind": "studio",         "priority": 2, "type": "html",       "url": "https://coffeeand.tv/about/join-us/"},
     {"name": "Envy Careers",             "company": "Envy",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.envypost.co.uk/careers"},
     {"name": "Lola Post Careers",        "company": "Lola",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.lola-post.com/careers"},
@@ -1277,14 +1277,22 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
 
 def parse_greenhouse(source: dict):
     try:
-        m = re.search(r"(?:boards|job-boards).greenhouse.io/([^/?#]+)", source["url"])
+        # Try direct URL match first
+        m = re.search(r"(?:boards|job-boards)\.greenhouse\.io/([^/?#]+)", source["url"])
+        if not m:
+            # Try fetching the page and extracting the board token from HTML/JS
+            html = fetch_text(source["url"])
+            m = re.search(r'greenhouse\.io/([A-Za-z0-9_-]+)', html)
         if m:
-            data = fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{m.group(1)}/jobs")
-            return [{"title": clean_text(i.get("title", "")),
-                     "location": clean_text((i.get("location") or {}).get("name", "")),
-                     "url": i.get("absolute_url", ""), "body": json.dumps(i),
-                     "external_id": str(i.get("id", "")), "ats_type": "greenhouse"}
-                    for i in data.get("jobs", [])], []
+            board = m.group(1).rstrip("/")
+            data = fetch_json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs")
+            jobs = data.get("jobs", [])
+            if jobs:
+                return [{"title": clean_text(i.get("title", "")),
+                         "location": clean_text((i.get("location") or {}).get("name", "")),
+                         "url": i.get("absolute_url", ""), "body": json.dumps(i),
+                         "external_id": str(i.get("id", "")), "ats_type": "greenhouse"}
+                        for i in jobs], []
     except Exception as _e:
         import logging as _log; _log.warning(f"parse_greenhouse error: {type(_e).__name__}: {_e}")
     return parse_html(source)
@@ -1407,6 +1415,39 @@ def parse_teamtailor(source: dict):
 def parse_smartrecruiters(source): return parse_html(source)
 def parse_workday(source):         return parse_html(source)
 
+def parse_recruitee(source: dict):
+    """Recruitee public API: GET https://{slug}.recruitee.com/api/offers/"""
+    try:
+        from urllib.parse import urlparse as _up
+        parsed = _up(source["url"])
+        # slug is the subdomain: framestore.recruitee.com -> framestore
+        subdomain = parsed.netloc.split(".")[0]
+        data = fetch_json(f"https://{subdomain}.recruitee.com/api/offers/")
+        offers = data.get("offers", [])
+        out = []
+        for o in offers:
+            title = clean_text(o.get("title", ""))
+            if not title:
+                continue
+            loc   = clean_text(o.get("location", "") or o.get("city", "") or "")
+            slug  = o.get("slug", "") or str(o.get("id", ""))
+            url   = f"https://{subdomain}.recruitee.com/o/{slug}" if slug else source["url"]
+            dept  = clean_text(o.get("department", "") or "")
+            body  = clean_text(o.get("description", "") or "")[:800]
+            out.append({
+                "title":       title,
+                "location":    loc,
+                "url":         url,
+                "body":        f"{dept} {body}".strip(),
+                "external_id": str(o.get("id", slug)),
+                "ats_type":    "recruitee",
+            })
+        if out:
+            return out, []
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_recruitee error: {type(_e).__name__}: {_e}")
+    return parse_html(source)
+
 def fetch_source_jobs(source: dict):
     t = source["type"]
     dispatch = {
@@ -1414,6 +1455,7 @@ def fetch_source_jobs(source: dict):
         "workable": parse_workable, "ashby": parse_ashby,
         "jobvite": parse_jobvite, "teamtailor": parse_teamtailor,
         "smartrecruiters": parse_smartrecruiters, "workday": parse_workday,
+        "recruitee": parse_recruitee,
     }
     return dispatch.get(t, parse_html)(source)
 
@@ -1863,14 +1905,22 @@ def handle_command(text: str) -> str:
                 results.append(f"Match test 'production coordinator': {matched!r}")
             except Exception as e:
                 results.append(f"Match test FAIL: {e}")
-            # Test 6: fetch Framestore and show raw job titles found
+            # Test 6: fetch Framestore Recruitee via API and show raw job titles
             try:
-                src = next(s for s in get_active_sources() if "Framestore Careers" in s["name"])
+                src = next(s for s in get_active_sources() if "Framestore Recruitee" in s["name"])
                 raw_jobs, _ = fetch_source_jobs(src)
                 titles = [j.get("title","?") for j in raw_jobs[:6]]
-                results.append(f"Framestore raw titles ({len(raw_jobs)}): {titles}")
+                results.append(f"Framestore Recruitee ({len(raw_jobs)} jobs): {titles}")
             except Exception as e:
-                results.append(f"Framestore titles FAIL: {e}")
+                results.append(f"Framestore Recruitee FAIL: {e}")
+            # Test 7: Jobvite RSS feed for DNEG
+            try:
+                src = next(s for s in get_active_sources() if s["name"] == "DNEG Jobvite")
+                raw_jobs, _ = fetch_source_jobs(src)
+                titles = [j.get("title","?") for j in raw_jobs[:4]]
+                results.append(f"DNEG Jobvite ({len(raw_jobs)} jobs): {titles}")
+            except Exception as e:
+                results.append(f"DNEG Jobvite FAIL: {e}")
             send_telegram_message("🔬 Diagnostics:\n" + "\n".join(results))
         threading.Thread(target=_diag, daemon=True).start()
         return "Running diagnostics..."
