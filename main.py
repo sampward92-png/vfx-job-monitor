@@ -1327,7 +1327,47 @@ def parse_workable(source: dict):
         pass
     return parse_html(source)
 def parse_ashby(source):           return parse_html(source)
-def parse_jobvite(source):         return parse_html(source)
+def parse_jobvite(source: dict):
+    """Jobvite RSS feed: jobs.jobvite.com/{slug}/feed"""
+    import xml.etree.ElementTree as ET
+    try:
+        from urllib.parse import urlparse as _up
+        parts = _up(source["url"])
+        # Extract slug: first path segment after the host
+        path_parts = [p for p in parts.path.split("/") if p]
+        if not path_parts:
+            raise ValueError("no slug")
+        slug = path_parts[0]
+        feed_url = f"https://jobs.jobvite.com/{slug}/feed"
+        r = requests.get(feed_url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        root = ET.fromstring(r.text)
+        ns = {"jv": "http://www.jobvite.com/ns/feed/1.0"}
+        out = []
+        for item in root.iter("item"):
+            title   = clean_text((item.findtext("title") or ""))
+            link    = clean_text((item.findtext("link") or ""))
+            loc_el  = item.find("jv:location", ns)
+            loc     = clean_text(loc_el.text if loc_el is not None else "")
+            dept_el = item.find("jv:jobType", ns) or item.find("jv:department", ns)
+            dept    = clean_text(dept_el.text if dept_el is not None else "")
+            body    = clean_text((item.findtext("description") or ""))[:1000]
+            jid     = clean_text((item.findtext("guid") or link))
+            if not title:
+                continue
+            out.append({
+                "title":       title,
+                "location":    loc,
+                "url":         link or source["url"],
+                "body":        f"{dept} {body}".strip(),
+                "external_id": jid,
+                "ats_type":    "jobvite",
+            })
+        if out:
+            return out, []
+    except Exception:
+        pass
+    return parse_html(source)
 def parse_teamtailor(source: dict):
     """Teamtailor public JSON endpoint: GET {subdomain}.teamtailor.com/jobs.json"""
     try:
