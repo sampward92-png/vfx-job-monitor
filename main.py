@@ -63,6 +63,9 @@ DEFAULT_EXCLUDES = [
     "recruiter", "talent acquisition", "hr ", "human resources",
     "accountant", "finance manager", "legal ", "lawyer", "solicitor",
     "sales ", "business development", "marketing manager",
+    # Generic / non-specific postings
+    "general application", "general enquiry", "speculative application",
+    "internal mobility", "internal transfer", "expression of interest",
     # Specific non-production programmes
     "jedi academy", "animation launchpad", "animation-launchpad", "animation - launchpad", "animation intern",
 ]
@@ -871,7 +874,12 @@ def score_job(job: CanonicalJob) -> tuple[float, dict]:
 
     neg_terms = ["senior", "lead", "director", "supervisor", "executive producer",
                  "principal", "recruiter", "software engineer", "technical director", " td "]
-    bd["negative_indicators"] = max(sum(-40 for t in neg_terms if t in blob), -100)
+    neg = max(sum(-40 for t in neg_terms if t in blob), -100)
+    # French-language title = almost certainly non-UK office
+    french_title_signals = ["coordonnateur", "coordinateur", "chef de", "directeur", "responsable"]
+    if any(t in title for t in french_title_signals):
+        neg = min(neg - 80, -80)
+    bd["negative_indicators"] = neg
 
     total = max(sum(bd.values()), 0)
     bd["total"] = total
@@ -1302,7 +1310,41 @@ def parse_workable(source: dict):
     return parse_html(source)
 def parse_ashby(source):           return parse_html(source)
 def parse_jobvite(source):         return parse_html(source)
-def parse_teamtailor(source):      return parse_html(source)
+def parse_teamtailor(source: dict):
+    """Teamtailor public JSON endpoint: GET {subdomain}.teamtailor.com/jobs.json"""
+    try:
+        from urllib.parse import urlparse as _up
+        parsed = _up(source["url"])
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        data = fetch_json(f"{base}/jobs.json")
+        jobs_raw = data if isinstance(data, list) else data.get("jobs", data.get("data", []))
+        out = []
+        for i in jobs_raw:
+            # Teamtailor wraps fields under 'attributes' in JSON:API format, or flat
+            attrs = i.get("attributes", i)
+            title = clean_text(attrs.get("title", ""))
+            if not title:
+                continue
+            loc_data = attrs.get("locations") or []
+            loc_str = ", ".join(
+                l.get("name", "") if isinstance(l, dict) else str(l)
+                for l in (loc_data if isinstance(loc_data, list) else [loc_data])
+            ) if loc_data else clean_text(attrs.get("location", "") or "")
+            slug  = attrs.get("slug", "") or str(i.get("id", ""))
+            apply = attrs.get("apply_url") or (f"{base}/jobs/{slug}" if slug else "")
+            out.append({
+                "title":       title,
+                "location":    loc_str,
+                "url":         apply or source["url"],
+                "body":        json.dumps(attrs),
+                "external_id": str(i.get("id", slug)),
+                "ats_type":    "teamtailor",
+            })
+        if out:
+            return out, []
+    except Exception:
+        pass
+    return parse_html(source)
 def parse_smartrecruiters(source): return parse_html(source)
 def parse_workday(source):         return parse_html(source)
 
