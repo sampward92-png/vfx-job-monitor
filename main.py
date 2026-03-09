@@ -1353,13 +1353,10 @@ def collect_and_store_jobs(force: bool = False) -> list:
     all_matched  = []
     emitted_keys = set()
     seen_keys    = set()
-    lock         = threading.Lock()
 
     def _scrape_one(source):
         try:
             raw_jobs, discovered = fetch_source_jobs(source)
-            save_discovered_sources(source, discovered)
-            record_source_success(source["name"], len(raw_jobs))
 
             # Detail-page fallback: for HTML sources, attempt enrichment on weak candidates
             # (those failing no_keyword) up to MAX_ENRICHMENTS per source
@@ -1379,54 +1376,93 @@ def collect_and_store_jobs(force: bool = False) -> list:
                     full_hay = normalize_text(f"{raw.get('title','')} {raw.get('body','')}")
                     kw_match = next((kw for kw in get_keywords() if kw in full_hay), None)
                     if kw_match:
-                        enriched_jobs.append(raw)  # already good, no need to enrich
+                        enriched_jobs.append(raw)
                         continue
-                    # Candidate failed keyword match — try fetching its detail page
                     enriched = enrich_from_detail_page(raw, source)
                     if enriched.get("_enriched"):
                         enriched_count += 1
                     enriched_jobs.append(enriched)
                 raw_jobs = enriched_jobs
 
-            return source, raw_jobs, None
+            return {
+                "source": source,
+                "raw_jobs": raw_jobs,
+                "discovered": discovered,
+                "error": None,
+            }
         except Exception as e:
-            err    = str(e)
-            etype  = "timeout" if "timeout" in err.lower() else "parse_error"
-            fails, _ = record_source_failure(source["name"], err[:200], etype)
-            if fails == 3: send_telegram_message(f"Source degraded: {source['name']}")
-            elif fails == 7: send_telegram_message(f"Source dead: {source['name']}")
-            return source, [], err
+            return {
+                "source": source,
+                "raw_jobs": [],
+                "discovered": [],
+                "error": str(e),
+            }
 
+    scrape_results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(_scrape_one, s): s for s in sources}
         for future in concurrent.futures.as_completed(futures, timeout=60):
+            source = futures[future]
             try:
-                source, raw_jobs, err = future.result()
-            except Exception:
+                scrape_results.append(future.result())
+            except Exception as e:
+                scrape_results.append({
+                    "source": source,
+                    "raw_jobs": [],
+                    "discovered": [],
+                    "error": str(e),
+                })
+
+    # Serial write phase: keep SQLite writes on the main thread only.
+    for result in scrape_results:
+        source     = result["source"]
+        raw_jobs   = result["raw_jobs"]
+        discovered = result["discovered"]
+        err        = result["error"]
+
+        if err:
+            err_l = err.lower()
+            if "timeout" in err_l:
+                etype = "timeout"
+            elif "http_error" in err_l or "429" in err_l or "403" in err_l or "404" in err_l:
+                etype = "http_error"
+            else:
+                etype = "parse_error"
+            fails, _ = record_source_failure(source["name"], err[:200], etype)
+            if fails == 3:
+                send_telegram_message(f"Source degraded: {source['name']}")
+            elif fails == 7:
+                send_telegram_message(f"Source dead: {source['name']}")
+            continue
+
+        save_discovered_sources(source, discovered)
+        record_source_success(source["name"], len(raw_jobs))
+
+        if not raw_jobs:
+            continue
+
+        for raw in raw_jobs:
+            job = normalise_to_canonical(raw, source)
+            ok, matched_keyword = title_keyword_match(job)
+            if not ok:
                 continue
-            if err or not raw_jobs:
+            job.matched_keyword = matched_keyword
+            if not location_allowed(job):
                 continue
-            for raw in raw_jobs:
-                job = normalise_to_canonical(raw, source)
-                ok, matched_keyword = title_keyword_match(job)
-                if not ok: continue
-                job.matched_keyword = matched_keyword
-                if not location_allowed(job): continue
-                total_score, breakdown = score_job(job)
-                job.score           = total_score
-                job.score_breakdown = breakdown
-                blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
-                job.location_normalized = detect_location(blob, company=job.company) or None
-                if job.location_normalized == "Non-UK" or total_score <= 0:
-                    continue
-                if total_score < threshold:
-                    continue
-                with lock:
-                    created, unique_key = upsert_job(job)
-                    seen_keys.add(unique_key)
-                    if (created or force) and unique_key not in emitted_keys:
-                        emitted_keys.add(unique_key)
-                        all_matched.append(job)
+            total_score, breakdown = score_job(job)
+            job.score           = total_score
+            job.score_breakdown = breakdown
+            blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
+            job.location_normalized = detect_location(blob, company=job.company) or None
+            if job.location_normalized == "Non-UK" or total_score <= 0:
+                continue
+            if total_score < threshold:
+                continue
+            created, unique_key = upsert_job(job)
+            seen_keys.add(unique_key)
+            if (created or force) and unique_key not in emitted_keys:
+                emitted_keys.add(unique_key)
+                all_matched.append(job)
 
     expire_stale_jobs(seen_keys)
     return sorted(all_matched, key=lambda j: j.score or 0, reverse=True)
@@ -1685,63 +1721,98 @@ def handle_command(text: str) -> str:
                 source_log   = []
                 seen_keys    = set()
                 emitted_keys = set()
-                lock         = threading.Lock()
 
                 def _scrape_one(source):
                     try:
                         raw_jobs, discovered = fetch_source_jobs(source)
-                        record_source_success(source["name"], len(raw_jobs))
-                        return source, raw_jobs, discovered, None
-                    except Exception as e:
-                        err = str(e)[:120]
-                        record_source_failure(source["name"], err, "parse_error")
-                        return source, [], [], err
 
+                        if source.get("type") == "html":
+                            MAX_ENRICHMENTS = 5
+                            enriched_count  = 0
+                            enriched_jobs   = []
+                            for raw in raw_jobs:
+                                if enriched_count >= MAX_ENRICHMENTS:
+                                    enriched_jobs.append(raw)
+                                    continue
+                                title_hay = normalize_text(f"{raw.get('title','')} {raw.get('url','')}")
+                                if any(ex in title_hay for ex in get_excludes()):
+                                    enriched_jobs.append(raw)
+                                    continue
+                                full_hay = normalize_text(f"{raw.get('title','')} {raw.get('body','')}")
+                                kw_match = next((kw for kw in get_keywords() if kw in full_hay), None)
+                                if kw_match:
+                                    enriched_jobs.append(raw)
+                                    continue
+                                enriched = enrich_from_detail_page(raw, source)
+                                if enriched.get("_enriched"):
+                                    enriched_count += 1
+                                enriched_jobs.append(enriched)
+                            raw_jobs = enriched_jobs
+
+                        return {"source": source, "raw_jobs": raw_jobs, "discovered": discovered, "error": None}
+                    except Exception as e:
+                        return {"source": source, "raw_jobs": [], "discovered": [], "error": str(e)[:120]}
+
+                scrape_results = []
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     futures = {executor.submit(_scrape_one, s): s for s in sources}
                     for future in concurrent.futures.as_completed(futures, timeout=60):
+                        source = futures[future]
                         try:
-                            source, raw_jobs, discovered, err = future.result()
+                            scrape_results.append(future.result())
                         except concurrent.futures.TimeoutError:
-                            source = futures[future]
-                            record_source_failure(source["name"], "timeout", "timeout")
-                            source_log.append((source["name"], 0, 0, "timeout", {}))
-                            continue
+                            scrape_results.append({"source": source, "raw_jobs": [], "discovered": [], "error": "timeout"})
                         except Exception as e:
-                            source = futures[future]
-                            source_log.append((source["name"], 0, 0, str(e)[:120], {}))
+                            scrape_results.append({"source": source, "raw_jobs": [], "discovered": [], "error": str(e)[:120]})
+
+                for result in scrape_results:
+                    source     = result["source"]
+                    raw_jobs   = result["raw_jobs"]
+                    discovered = result["discovered"]
+                    err        = result["error"]
+
+                    if err:
+                        err_l = err.lower()
+                        if "timeout" in err_l:
+                            etype = "timeout"
+                        elif "http_error" in err_l or "429" in err_l or "403" in err_l or "404" in err_l:
+                            etype = "http_error"
+                        else:
+                            etype = "parse_error"
+                        record_source_failure(source["name"], err[:120], etype)
+                        source_log.append((source["name"], 0, 0, err[:120], {}))
+                        continue
+
+                    save_discovered_sources(source, discovered)
+                    record_source_success(source["name"], len(raw_jobs))
+
+                    matched_this  = 0
+                    reason_counts = {"excluded": 0, "no_keyword": 0, "location": 0, "score": 0}
+
+                    for raw in raw_jobs:
+                        job    = normalise_to_canonical(raw, source)
+                        reason = classify_rejection(job, threshold)
+                        if reason != "passed":
+                            reason_counts[reason] += 1
                             continue
-
-                        if err:
-                            source_log.append((source["name"], 0, 0, err, {}))
+                        ok, matched_keyword = title_keyword_match(job)
+                        if not ok:
+                            reason_counts["no_keyword"] += 1
                             continue
+                        job.matched_keyword = matched_keyword
+                        total_score, breakdown = score_job(job)
+                        job.score = total_score
+                        job.score_breakdown = breakdown
+                        blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
+                        job.location_normalized = detect_location(blob, company=job.company) or None
+                        created, unique_key = upsert_job(job)
+                        seen_keys.add(unique_key)
+                        if unique_key not in emitted_keys:
+                            emitted_keys.add(unique_key)
+                            all_matched.append(job)
+                        matched_this += 1
 
-                        save_discovered_sources(source, discovered)
-                        matched_this  = 0
-                        reason_counts = {"excluded": 0, "no_keyword": 0, "location": 0, "score": 0}
-
-                        for raw in raw_jobs:
-                            job    = normalise_to_canonical(raw, source)
-                            reason = classify_rejection(job, threshold)
-                            if reason != "passed":
-                                reason_counts[reason] += 1
-                                continue
-                            ok, matched_keyword = title_keyword_match(job)
-                            if not ok:
-                                reason_counts["no_keyword"] += 1
-                                continue
-                            job.matched_keyword = matched_keyword
-                            total_score, breakdown = score_job(job)
-                            job.score = total_score; job.score_breakdown = breakdown
-                            blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
-                            job.location_normalized = detect_location(blob, company=job.company) or None
-                            with lock:
-                                created, unique_key = upsert_job(job)
-                                seen_keys.add(unique_key)
-                                if unique_key not in emitted_keys:
-                                    emitted_keys.add(unique_key); all_matched.append(job)
-                            matched_this += 1
-                        source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
+                    source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
 
                 expire_stale_jobs(seen_keys)
                 all_matched.sort(key=lambda j: j.score or 0, reverse=True)
@@ -1786,12 +1857,15 @@ def handle_command(text: str) -> str:
                     f"{matched_line}{hint}"
                 )
 
-                if not all_matched: return
+                if not all_matched:
+                    return
 
                 seen_alert, deduped = set(), []
                 for job in all_matched:
                     key = build_unique_key(job)
-                    if key not in seen_alert: seen_alert.add(key); deduped.append(job)
+                    if key not in seen_alert:
+                        seen_alert.add(key)
+                        deduped.append(job)
 
                 direct_roles    = [j for j in deduped if classify_opportunity(j) != "programme"]
                 programme_roles = [j for j in deduped if classify_opportunity(j) == "programme"]
@@ -1799,14 +1873,16 @@ def handle_command(text: str) -> str:
                 if direct_roles:
                     send_telegram_message(f"Top direct roles ({min(len(direct_roles),10)} shown):")
                     for job in direct_roles[:10]:
-                        send_job_alert(job); time.sleep(0.5)
+                        send_job_alert(job)
+                        time.sleep(0.5)
                     if len(direct_roles) > 10:
                         send_telegram_message(f"...and {len(direct_roles)-10} more. Use /jobs to see all.")
 
                 if programme_roles:
                     send_telegram_message(f"Programme signals ({min(len(programme_roles),5)} shown):")
                     for job in programme_roles[:5]:
-                        send_job_alert(job); time.sleep(0.5)
+                        send_job_alert(job)
+                        time.sleep(0.5)
                     if len(programme_roles) > 5:
                         send_telegram_message(f"...and {len(programme_roles)-5} more. Use /jobs to see all.")
 
