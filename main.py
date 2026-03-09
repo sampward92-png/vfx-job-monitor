@@ -925,6 +925,8 @@ def format_help_text() -> str:
         "See jobs you've marked as applied.\n\n"
         "📋 /menu\n"
         "Show the main menu buttons anytime.\n\n"
+        "📡 /coverage\n"
+        "See how many jobs each studio is currently listing.\n\n"
         "── Alert labels ──\n\n"
         "🎯 Direct role -- a real job vacancy at a studio\n"
         "🎓 Programme / internship -- a scheme, traineeship or work experience opportunity\n\n"
@@ -1368,6 +1370,7 @@ def send_job_alert(job: CanonicalJob, chat_id=None):
             [{"text": "🔗 Open job", "url": job.apply_url}],
             [{"text": "📌 Mark as applied", "callback_data": f"applied::{unique_key}"},
              {"text": "🚫 Ignore",           "callback_data": f"ignore::{unique_key}"}],
+            [{"text": "🧠 Explain this role", "callback_data": f"explain::{normalize_text(job.title)[:60]}"}],
         ]
     send_telegram_message(text, chat_id=chat_id, buttons=buttons)
 
@@ -1750,6 +1753,62 @@ def handle_command(text: str) -> str:
             lines.append(f"{status_lbl} {name}\n  Fails: {fails} | {evt or '?'} | Last OK: {last_ok or 'never'}\n  {(error or '')[:100]}")
         return "\n\n".join(lines)
 
+    if lower == "/weekly":
+        threading.Thread(target=send_weekly_digest, daemon=True).start()
+        return "📊 Sending weekly digest..."
+
+    if lower == "/coverage":
+        rows = db_execute(
+            """SELECT sh.source_name, sh.jobs_found_last, sh.jobs_found_total,
+                      sh.last_success_at, sh.status, sh.last_event_type, s.company
+               FROM source_health sh
+               LEFT JOIN sources s ON s.name = sh.source_name
+               ORDER BY sh.jobs_found_total DESC""",
+            fetch=True,
+        ) or []
+        active       = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
+        total_active = active[0][0]
+
+        def friendly_status(status, last_event, fails_implied=False):
+            if status == "healthy" and last_event == "success_nonzero": return "Working normally"
+            if status == "healthy" and last_event == "success_zero":    return "No jobs found recently"
+            if status == "suspect":                                      return "No jobs found recently"
+            if status == "degraded":                                     return "Needs attention"
+            if status == "dead":                                         return "Not responding"
+            if status == "unknown":                                      return "Not checked yet"
+            return "No jobs found recently"
+
+        producing, quiet, broken = [], [], []
+        for r in rows:
+            name, last, total, last_ok, status, evt, company = r
+            label = company or name
+            fs    = friendly_status(status, evt)
+            if status in ("dead", "degraded"):
+                broken.append((label, fs))
+            elif (last or 0) > 0:
+                producing.append((label, last or 0, total or 0, last_ok))
+            else:
+                quiet.append((label, fs))
+
+        lines = [f"📡 Coverage report\n{total_active} studios monitored\n"]
+
+        if producing:
+            lines.append("Producing results:")
+            for company, last, total, last_ok in producing[:12]:
+                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total)")
+
+        if quiet:
+            lines.append("\nNo listings found (may be JS-rendered or currently quiet):")
+            for company, fs in quiet[:10]:
+                lines.append(f"  🟡 {company} -- {fs}")
+
+        if broken:
+            lines.append("\nNot responding (URL may have changed):")
+            for company, fs in broken:
+                lines.append(f"  ❌ {company} -- {fs}")
+
+        return "\n".join(lines)
+
     if lower.startswith("/setlocation "):
         mode = lower[len("/setlocation "):].strip()
         if mode not in {"london", "uk", "off"}: return "Use: london, uk, or off"
@@ -1788,6 +1847,99 @@ def get_applied_jobs():
         fetch=True,
     ) or []
 
+ROLE_EXPLANATIONS = {
+    "production assistant": (
+        "Production Assistant\n\n"
+        "An entry-level role supporting the production team day-to-day.\n\n"
+        "Typical responsibilities:\n"
+        "  scheduling and diary management\n"
+        "  coordinating between departments\n"
+        "  tracking deliverables and deadlines\n"
+        "  admin and paperwork\n\n"
+        "A common first step into studio production."
+    ),
+    "production coordinator": (
+        "Production Coordinator\n\n"
+        "Keeps productions running smoothly between departments.\n\n"
+        "Typical responsibilities:\n"
+        "  managing schedules and shot tracking\n"
+        "  coordinating artists, supervisors and producers\n"
+        "  maintaining production databases\n"
+        "  handling day-to-day logistics\n\n"
+        "Often the step up from Production Assistant."
+    ),
+    "studio runner": (
+        "Studio Runner\n\n"
+        "The most entry-level studio role -- great for getting your foot in the door.\n\n"
+        "Typical responsibilities:\n"
+        "  general studio support and errands\n"
+        "  helping with deliveries and equipment\n"
+        "  supporting multiple departments\n\n"
+        "Runners often move into PA or coordinator roles quickly."
+    ),
+    "production runner": (
+        "Production Runner\n\n"
+        "Similar to a Studio Runner but focused on a specific production.\n\n"
+        "Typical responsibilities:\n"
+        "  supporting the production office\n"
+        "  running between departments\n"
+        "  general admin and logistics support\n\n"
+        "A great entry point into production."
+    ),
+    "assistant producer": (
+        "Assistant Producer\n\n"
+        "Supports producers in managing a production from creative through delivery.\n\n"
+        "Typical responsibilities:\n"
+        "  supporting the producer day-to-day\n"
+        "  liaising with clients and internal teams\n"
+        "  helping manage budgets and schedules\n\n"
+        "Usually requires some prior production experience."
+    ),
+    "production trainee": (
+        "Production Trainee\n\n"
+        "A structured learning role designed for people new to the industry.\n\n"
+        "Typical responsibilities:\n"
+        "  rotating across production departments\n"
+        "  learning studio workflows\n"
+        "  supporting senior production staff\n\n"
+        "Often part of a formal training scheme."
+    ),
+    "project coordinator": (
+        "Project Coordinator\n\n"
+        "Keeps a specific project or set of projects on track.\n\n"
+        "Typical responsibilities:\n"
+        "  tracking tasks, milestones and timelines\n"
+        "  coordinating between teams\n"
+        "  managing project documentation\n\n"
+        "Transferable across many studio types."
+    ),
+    "post production assistant": (
+        "Post Production Assistant\n\n"
+        "Supports the post production team through editing and delivery.\n\n"
+        "Typical responsibilities:\n"
+        "  organising and managing media assets\n"
+        "  assisting editors and post supervisors\n"
+        "  coordinating review and feedback sessions\n\n"
+        "A good entry point into post production."
+    ),
+}
+
+def explain_role(title: str) -> str:
+    low = normalize_text(title)
+    for key, explanation in ROLE_EXPLANATIONS.items():
+        if key in low:
+            return explanation
+    # Generic fallback
+    return (
+        f"{title.title()}\n\n"
+        "This role is part of the production team at a VFX or animation studio.\n\n"
+        "Entry-level production roles typically involve:\n"
+        "  supporting producers and coordinators\n"
+        "  tracking schedules and deliverables\n"
+        "  coordinating between departments\n\n"
+        "A good starting point for a career in studio production."
+    )
+
 def handle_callback(callback_query: dict, chat_id: str):
     data = callback_query.get("data", "")
     cb_id = callback_query.get("id", "")
@@ -1812,6 +1964,11 @@ def handle_callback(callback_query: dict, chat_id: str):
         unique_key = data[len("ignore::"):]
         mark_job_interaction(unique_key, "ignored")
         send_telegram_message("Got it. I'll note that.", chat_id=chat_id)
+        return
+
+    if data.startswith("explain::"):
+        title = data[len("explain::"):]
+        send_telegram_message(explain_role(title), chat_id=chat_id)
         return
 
     if data.startswith("location::"):
@@ -1931,7 +2088,55 @@ def command_loop():
             pass
         time.sleep(3)
 
+def send_weekly_digest():
+    cutoff_week = (utc_now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Jobs found this week
+    week_rows = db_execute(
+        """SELECT title, company, opportunity_type, score
+           FROM jobs WHERE first_seen >= ? ORDER BY score DESC""",
+        (cutoff_week,), fetch=True,
+    ) or []
+
+    direct_jobs  = [r for r in week_rows if r[2] != "programme"]
+    programme_jobs = [r for r in week_rows if r[2] == "programme"]
+
+    if not week_rows:
+        send_telegram_message(
+            "📊 Weekly hiring signal\n\n"
+            "No new production roles appeared this week across monitored studios.\n\n"
+            "I'll keep watching and alert you when something comes up."
+        )
+        return
+
+    # Most active studio
+    from collections import Counter
+    studio_counts = Counter(r[1] for r in week_rows)
+    top_studio    = studio_counts.most_common(1)[0][0] if studio_counts else "Unknown"
+
+    lines = [
+        "📊 Weekly hiring signal\n",
+        f"Across monitored studios this week:\n",
+        f"  {len(direct_jobs)} production role{'s' if len(direct_jobs) != 1 else ''} appeared",
+        f"  {len(programme_jobs)} internship / programme signal{'s' if len(programme_jobs) != 1 else ''}",
+        f"  Most active studio: {top_studio}\n",
+    ]
+
+    if direct_jobs:
+        lines.append("Top roles this week:")
+        for title, company, _, score in direct_jobs[:5]:
+            lines.append(f"  🎯 {title} -- {company}")
+
+    if programme_jobs:
+        lines.append("\nProgrammes:")
+        for title, company, _, score in programme_jobs[:3]:
+            lines.append(f"  🎓 {title} -- {company}")
+
+    lines.append("\nRun 🚀 /scan to check for anything new right now.")
+    send_telegram_message("\n".join(lines))
+
 def monitor_loop():
+    last_digest_day = None
     while True:
         try:
             if get_state("paused", "0") != "1":
@@ -1942,6 +2147,16 @@ def monitor_loop():
             else:
                 set_state("last_checked", now_str())
                 set_state("last_match_count", "0")
+
+            # Weekly digest — send on Monday mornings (weekday 0), once per day
+            now = utc_now()
+            today = now.date()
+            if now.weekday() == 0 and 8 <= now.hour < 9 and last_digest_day != today:
+                last_digest_day = today
+                try:
+                    send_weekly_digest()
+                except Exception:
+                    pass
         except Exception:
             set_state("last_checked", now_str())
         time.sleep(CHECK_INTERVAL_SECONDS)
