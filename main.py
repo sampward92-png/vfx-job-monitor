@@ -6,7 +6,6 @@ import sqlite3
 import hashlib
 import threading
 import concurrent.futures
-import html as html_lib
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -14,7 +13,7 @@ from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, request, redirect, url_for, render_template_string
+from flask import Flask
 
 PORT = int(os.environ.get("PORT", "8080"))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -111,6 +110,15 @@ NON_UK_TERMS = [
     "amsterdam", "netherlands", "sweden", "stockholm",
 ]
 
+# Domains that should never be auto-added as discovered sources
+# (job boards, aggregators, non-studio sites)
+DISCOVERY_BLOCKED_DOMAINS = {
+    "entertainmentcareers.net", "indeed.com", "linkedin.com", "glassdoor.com",
+    "reed.co.uk", "totaljobs.com", "cv-library.co.uk", "monster.co.uk",
+    "mandy.com", "productionbase.co.uk", "theguardian.com", "broadcastnow.co.uk",
+    "animationcareerreview.com", "creativeskillset.org",
+}
+
 DEFAULT_SOURCES = [
     {"name": "Framestore Careers",       "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.framestore.com/careers"},
     {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://framestore.recruitee.com/"},
@@ -135,8 +143,6 @@ DEFAULT_SOURCES = [
     {"name": "Electric Theatre Careers", "company": "Electric Theatre Collective", "kind": "studio",         "priority": 2, "type": "html",       "url": "https://electrictheatre.tv/careers"},
     {"name": "Untold Studios Teamtailor","company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.untoldstudios.tv/jobs"},
     {"name": "Untold Studios Careers",   "company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "html",       "url": "https://untoldstudios.tv/careers/"},
-    {"name": "Animation UK Jobs",        "company": "Animation UK",                "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.animationuk.org/subpages/job-vacancies/"},
-    {"name": "UK Screen Alliance Jobs",  "company": "UK Screen Alliance",          "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.ukscreenalliance.co.uk/subpages/job-vacancies/"},
 ]
 
 ATS_PATTERNS = {
@@ -217,11 +223,14 @@ def is_allowed_html_link(source: dict, full_url: str) -> bool:
         "/subscribe", "/membership", "/members", "/join", "/donate",
         "/privacy", "/terms", "/cookies", "/accessibility",
         "/training", "/skills-checklists",
+        "/careers", "/jobs", "/vacancies",           # root index pages
+        "/subpages/job-vacancies",                   # index pages
     }
     blocked_contains = [
         "/subscribe", "/membership", "/information-and-resources",
         "/skills-checklists", "/training/screenskills",
         "/applying-uk-film", "/tax-incentive", "/bfi-network",
+        "/job-vacancies",                            # generic job board index paths
     ]
     if any(path == b or path.startswith(b + "/") for b in blocked_exact):
         return False
@@ -310,6 +319,13 @@ def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
     # Reject generic navigation/index titles before they enter the pipeline
     if title.strip().lower() in _GENERIC_TITLES:
         title = ""  # Will fail keyword match downstream -- safe rejection path
+    # Reject titles that are clearly page body text, not a job title (>80 chars)
+    elif len(title) > 80:
+        title = ""  # Too long to be a real job title
+    # Reject titles that are clearly scraped body text, not a job title
+    # (real job titles are short; >120 chars is almost always a page description)
+    if len(title) > 120:
+        title = ""
     company  = raw.get("company", source.get("company", ""))
     url      = raw.get("url", "")
     location = clean_text(raw.get("location", "") or "")
@@ -555,6 +571,11 @@ def save_discovered_sources(parent_source: dict, discovered: list) -> int:
     for ds in discovered:
         candidate_url = canonicalize_url(ds.get("url", ""))
         if not candidate_url:
+            continue
+        # Block job boards, aggregators, and non-studio sites from being auto-added
+        from urllib.parse import urlparse as _up
+        _domain = _up(candidate_url).netloc.lstrip("www.")
+        if any(_domain == bd or _domain.endswith("." + bd) for bd in DISCOVERY_BLOCKED_DOMAINS):
             continue
         if db_execute("SELECT 1 FROM sources WHERE url=? LIMIT 1", (candidate_url,), fetch=True):
             continue
@@ -878,7 +899,7 @@ def location_allowed(job: CanonicalJob) -> bool:
         return True
     if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
         return True
-    # Industry boards (ScreenSkills, Animation UK, UK Screen Alliance) are UK-only by definition
+    # Industry boards (ScreenSkills) are UK-only by definition
     if job.source_kind == "industry_board":
         return True
     return False
@@ -1640,7 +1661,7 @@ def handle_command(text: str) -> str:
         rows = db_execute(
             """SELECT title, company, location_raw, apply_url, first_seen, score,
                       score_breakdown_json, matched_keyword, source_name, ats_type
-               FROM jobs WHERE job_status='active' ORDER BY score DESC, id DESC LIMIT 30""",
+               FROM jobs WHERE job_status='active' AND (location_normalized IS NULL OR location_normalized != 'Non-UK') ORDER BY score DESC, id DESC LIMIT 30""",
             fetch=True,
         )
         if not rows:
@@ -2002,6 +2023,28 @@ def handle_command(text: str) -> str:
     if lower == "/resume":
         set_state("paused", "0"); return "Monitoring resumed."
 
+    if lower.startswith("/disablesource "):
+        name = clean_text(text[len("/disablesource "):]).strip()
+        rows = db_execute("SELECT id, name, company FROM sources WHERE active=1", fetch=True) or []
+        matches = [r for r in rows if name.lower() in r[1].lower() or name.lower() in r[2].lower()]
+        if not matches:
+            return f"No active source matching '{name}'. Use /sources to list."
+        for sid, sname, scompany in matches:
+            db_execute("UPDATE sources SET active=0 WHERE id=?", (sid,))
+        names = ", ".join(f"{r[1]} ({r[2]})" for r in matches)
+        return f"Disabled: {names}"
+
+    if lower.startswith("/enablesource "):
+        name = clean_text(text[len("/enablesource "):]).strip()
+        rows = db_execute("SELECT id, name, company FROM sources WHERE active=0", fetch=True) or []
+        matches = [r for r in rows if name.lower() in r[1].lower() or name.lower() in r[2].lower()]
+        if not matches:
+            return f"No disabled source matching '{name}'."
+        for sid, sname, scompany in matches:
+            db_execute("UPDATE sources SET active=1 WHERE id=?", (sid,))
+        names = ", ".join(f"{r[1]} ({r[2]})" for r in matches)
+        return f"Enabled: {names}"
+
     return "Unknown command. Use /help."
 
 # ── Background threads ─────────────────────────────────────────────────────────
@@ -2023,207 +2066,6 @@ def get_applied_jobs():
            ORDER BY ji.actioned_at DESC LIMIT 20""",
         fetch=True,
     ) or []
-
-
-# ── Web app helpers ───────────────────────────────────────────────────────────
-
-def get_active_jobs_web(limit: int = 200, q: str = "", kind: str = "all"):
-    sql = """
-        SELECT id, unique_key, title, company, location_raw, apply_url, first_seen, score, opportunity_type
-        FROM jobs
-        WHERE job_status='active'
-    """
-    params = []
-
-    if q:
-        sql += " AND (lower(title) LIKE ? OR lower(company) LIKE ?)"
-        like = f"%{q.lower()}%"
-        params.extend([like, like])
-
-    if kind == "direct":
-        sql += " AND (opportunity_type IS NULL OR opportunity_type != 'programme')"
-    elif kind == "programme":
-        sql += " AND opportunity_type = 'programme'"
-
-    sql += " ORDER BY score DESC, id DESC LIMIT ?"
-    params.append(limit)
-    return db_execute(sql, tuple(params), fetch=True) or []
-
-
-def get_saved_jobs_web():
-    return db_execute(
-        """
-        SELECT j.id, j.unique_key, j.title, j.company, j.location_raw, j.apply_url, j.first_seen, j.score, j.opportunity_type
-        FROM jobs j
-        JOIN job_interactions i ON j.unique_key = i.unique_key
-        WHERE i.action='saved' AND j.job_status='active'
-        ORDER BY j.score DESC, j.id DESC
-        """,
-        fetch=True,
-    ) or []
-
-
-def get_applied_jobs_web():
-    return db_execute(
-        """
-        SELECT j.id, j.unique_key, j.title, j.company, j.location_raw, j.apply_url, i.actioned_at, j.score, j.opportunity_type
-        FROM jobs j
-        JOIN job_interactions i ON j.unique_key = i.unique_key
-        WHERE i.action='applied'
-        ORDER BY i.actioned_at DESC
-        """,
-        fetch=True,
-    ) or []
-
-
-def get_job_by_id(job_id: int):
-    rows = db_execute(
-        """
-        SELECT id, unique_key, title, company, location_raw, location_normalized,
-               apply_url, first_seen, score, opportunity_type, source_name,
-               score_breakdown_json, description_text
-        FROM jobs
-        WHERE id=?
-        LIMIT 1
-        """,
-        (job_id,),
-        fetch=True,
-    )
-    return rows[0] if rows else None
-
-
-def has_interaction(unique_key: str, action: str) -> bool:
-    rows = db_execute(
-        "SELECT 1 FROM job_interactions WHERE unique_key=? AND action=? LIMIT 1",
-        (unique_key, action),
-        fetch=True,
-    )
-    return bool(rows)
-
-
-def remove_job_interaction_web(unique_key: str, action: str):
-    db_execute(
-        "DELETE FROM job_interactions WHERE unique_key=? AND action=?",
-        (unique_key, action),
-    )
-
-
-def web_nav(current: str = "") -> str:
-    items = [
-        ("/", "Home"),
-        ("/jobs", "Jobs"),
-        ("/saved", "Saved"),
-        ("/applied", "Applied"),
-        ("/coverage", "Coverage"),
-    ]
-    links = []
-    for href, label in items:
-        if href == current:
-            links.append(f"<strong>{label}</strong>")
-        else:
-            links.append(f'<a href="{href}">{label}</a>')
-    return " · ".join(links)
-
-
-def page_shell(title: str, body: str, current: str = "") -> str:
-    nav = web_nav(current)
-    return render_template_string(
-        """
-        <!doctype html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>{{ title }}</title>
-          <style>
-            :root { color-scheme: light; }
-            body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; margin: 0; background: #f7f7fb; color: #111; }
-            .wrap { max-width: 920px; margin: 0 auto; padding: 20px; }
-            .top { margin-bottom: 18px; }
-            .nav { font-size: 14px; color: #666; margin-top: 8px; }
-            .nav a { color: #444; text-decoration: none; }
-            .card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
-            .muted { color: #666; font-size: 14px; }
-            .title { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
-            .jobtitle { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
-            .chips { margin-top: 8px; margin-bottom: 10px; }
-            .chip { display: inline-block; font-size: 12px; padding: 5px 9px; border-radius: 999px; background: #f0f0f5; margin-right: 6px; margin-bottom: 6px; }
-            .actions a, .actions button { display: inline-block; margin-right: 8px; margin-top: 8px; text-decoration: none; border: 0; background: #111; color: white; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; }
-            .actions .secondary { background: #ececf2; color: #111; }
-            form.inline { display: inline; }
-            .search { background: white; border-radius: 16px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
-            input[type=text], select { width: 100%; max-width: 320px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; margin-right: 8px; margin-bottom: 8px; }
-            button.filter { background: #111; color: white; border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
-            .desc { white-space: pre-wrap; line-height: 1.45; }
-          </style>
-        </head>
-        <body>
-          <div class="wrap">
-            <div class="top">
-              <div class="title">VFX Job Monitor</div>
-              <div class="muted">Entry-level production roles in VFX, animation and post-production.</div>
-              <div class="nav">{{ nav|safe }}</div>
-            </div>
-            {{ body|safe }}
-          </div>
-        </body>
-        </html>
-        """,
-        title=title,
-        body=body,
-        nav=nav,
-    )
-
-
-def render_job_card(job_row, show_applied_time: bool = False) -> str:
-    job_id, unique_key, title, company, loc, url, seen_or_applied, score, opp_type = job_row
-    title_e = html_lib.escape(title or "")
-    company_e = html_lib.escape(company or "")
-    url_e = html_lib.escape(url or "")
-    loc_text = prettify_location(loc) if loc else "Location not listed"
-    loc_e = html_lib.escape(loc_text)
-    label = "Programme / internship" if opp_type == "programme" else "Direct role"
-    icon = "🎓" if opp_type == "programme" else "🎯"
-
-    saved = has_interaction(unique_key, "saved")
-    applied = has_interaction(unique_key, "applied")
-
-    buttons = [
-        f'<a href="/job/{job_id}">View</a>',
-        f'<a href="{url_e}" target="_blank" rel="noopener" class="secondary">Open job</a>',
-    ]
-
-    if saved:
-        buttons.append(
-            f'<form class="inline" method="post" action="/unsave/{job_id}"><button class="secondary" type="submit">Unsave</button></form>'
-        )
-    else:
-        buttons.append(
-            f'<form class="inline" method="post" action="/save/{job_id}"><button class="secondary" type="submit">Save</button></form>'
-        )
-
-    if not applied:
-        buttons.append(
-            f'<form class="inline" method="post" action="/apply/{job_id}"><button class="secondary" type="submit">Mark applied</button></form>'
-        )
-
-    meta_line = f"First seen: {html_lib.escape(seen_or_applied or '')}"
-    if show_applied_time:
-        meta_line = f"Applied: {html_lib.escape(seen_or_applied or '')}"
-
-    return f"""
-      <div class="card">
-        <div class="jobtitle">{icon} {title_e}</div>
-        <div>{company_e}</div>
-        <div class="chips">
-          <span class="chip">{html_lib.escape(label)}</span>
-          <span class="chip">{loc_e}</span>
-          <span class="chip">Score {int(score or 0)}</span>
-        </div>
-        <div class="muted">{meta_line}</div>
-        <div class="actions">{''.join(buttons)}</div>
-      </div>
-    """
 
 ROLE_EXPLANATIONS = {
     "production assistant": (
@@ -2543,667 +2385,18 @@ def monitor_loop():
 
 @app.route("/")
 def home():
-    latest = db_execute(
-        """
-        SELECT id, unique_key, title, company, location_raw, apply_url, first_seen, score, opportunity_type
-        FROM jobs
-        WHERE job_status='active'
-        ORDER BY score DESC, id DESC
-        LIMIT 8
-        """,
-        fetch=True,
-    ) or []
-
-    total_active = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-    direct_count = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND (opportunity_type IS NULL OR opportunity_type != 'programme')", fetch=True) or [[0]])[0][0]
-    programme_count = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND opportunity_type='programme'", fetch=True) or [[0]])[0][0]
-
-    cards = "".join(render_job_card(r) for r in latest) if latest else '<div class="card">No active jobs yet.</div>'
-
-    body = f"""
-      <div class="card">
-        <div class="jobtitle">Today’s overview</div>
-        <div class="chips">
-          <span class="chip">Active jobs {total_active}</span>
-          <span class="chip">Direct roles {direct_count}</span>
-          <span class="chip">Programmes {programme_count}</span>
-        </div>
-        <div class="actions">
-          <a href="/jobs">Browse jobs</a>
-          <a href="/saved" class="secondary">Saved</a>
-          <a href="/applied" class="secondary">Applied</a>
-          <a href="/coverage" class="secondary">Coverage</a>
-        </div>
-      </div>
-      {cards}
-    """
-    return page_shell("VFX Job Monitor", body, current="/")
-
+    total   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    sources = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+    healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
+    return (
+        f"VFX Job Monitor -- Phase 2a\n"
+        f"Active jobs: {total} | Sources: {sources} | Healthy: {healthy}\n"
+        f"Last checked: {get_state('last_checked', 'Never')}"
+    ), 200
 
 @app.route("/health")
 def health_check():
     return {"status": "ok"}, 200
-
-
-@app.route("/jobs")
-def web_jobs():
-    q = (request.args.get("q") or "").strip()
-    kind = (request.args.get("kind") or "all").strip()
-    rows = get_active_jobs_web(limit=200, q=q, kind=kind)
-
-    cards = "".join(render_job_card(r) for r in rows) if rows else '<div class="card">No matching jobs right now.</div>'
-
-    q_e = html_lib.escape(q)
-    body = f"""
-      <div class="search">
-        <form method="get" action="/jobs">
-          <input type="text" name="q" value="{q_e}" placeholder="Search by title or company">
-          <select name="kind">
-            <option value="all" {'selected' if kind=='all' else ''}>All opportunities</option>
-            <option value="direct" {'selected' if kind=='direct' else ''}>Direct roles only</option>
-            <option value="programme" {'selected' if kind=='programme' else ''}>Programmes only</option>
-          </select>
-          <button class="filter" type="submit">Filter</button>
-        </form>
-      </div>
-      {cards}
-    """
-    return page_shell("Jobs", body, current="/jobs")
-
-
-@app.route("/saved")
-def web_saved():
-    rows = get_saved_jobs_web()
-    body = "".join(render_job_card(r) for r in rows) if rows else '<div class="card">No saved jobs yet.</div>'
-    return page_shell("Saved jobs", body, current="/saved")
-
-
-@app.route("/applied")
-def web_applied_page():
-    rows = get_applied_jobs_web()
-    body = "".join(render_job_card(r, show_applied_time=True) for r in rows) if rows else '<div class="card">No applied jobs yet.</div>'
-    return page_shell("Applied jobs", body, current="/applied")
-
-
-@app.route("/coverage")
-def web_coverage():
-    source_count = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
-    healthy_count = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
-
-    rows = db_execute(
-        """
-        SELECT company, COUNT(*), MAX(score)
-        FROM jobs
-        WHERE job_status='active'
-        GROUP BY company
-        ORDER BY COUNT(*) DESC, MAX(score) DESC
-        """,
-        fetch=True,
-    ) or []
-
-    items = ""
-    for company, count, max_score in rows:
-        items += f'<div class="card"><div class="jobtitle">{html_lib.escape(company or "Unknown")}</div><div class="muted">{count} active job(s) · top score {int(max_score or 0)}</div></div>'
-
-    if not items:
-        items = '<div class="card">No active jobs yet.</div>'
-
-    body = f"""
-      <div class="card">
-        <div class="jobtitle">Coverage overview</div>
-        <div class="chips">
-          <span class="chip">Active sources {source_count}</span>
-          <span class="chip">Healthy sources {healthy_count}</span>
-        </div>
-      </div>
-      {items}
-    """
-    return page_shell("Coverage", body, current="/coverage")
-
-
-@app.route("/job/<int:job_id>")
-def web_job_detail(job_id: int):
-    row = get_job_by_id(job_id)
-    if not row:
-        return page_shell("Job not found", '<div class="card">That job could not be found.</div>')
-
-    (
-        _id, unique_key, title, company, location_raw, location_normalized,
-        apply_url, first_seen, score, opportunity_type, source_name,
-        score_breakdown_json, description_text
-    ) = row
-
-    loc = prettify_location(location_raw or location_normalized)
-    label = "Programme / internship" if opportunity_type == "programme" else "Direct role"
-
-    actions = f"""
-      <div class="actions">
-        <a href="{html_lib.escape(apply_url or '')}" target="_blank" rel="noopener">Open official job page</a>
-        <form class="inline" method="post" action="/save/{job_id}">
-          <button class="secondary" type="submit">Save</button>
-        </form>
-        <form class="inline" method="post" action="/apply/{job_id}">
-          <button class="secondary" type="submit">Mark applied</button>
-        </form>
-      </div>
-    """
-
-    body = f"""
-      <div class="card">
-        <div class="jobtitle">{html_lib.escape(title or '')}</div>
-        <div>{html_lib.escape(company or '')}</div>
-        <div class="chips">
-          <span class="chip">{html_lib.escape(label)}</span>
-          <span class="chip">{html_lib.escape(loc)}</span>
-          <span class="chip">Score {int(score or 0)}</span>
-        </div>
-        <div class="muted">First seen: {html_lib.escape(first_seen or '')}</div>
-        <div class="muted">Source: {html_lib.escape(source_name or '')}</div>
-        {actions}
-      </div>
-      <div class="card">
-        <div class="jobtitle">Description</div>
-        <div class="desc muted">{html_lib.escape(description_text or 'No description stored.')}</div>
-      </div>
-    """
-    return page_shell(title or 'Job detail', body)
-
-
-@app.route("/save/<int:job_id>", methods=["POST"])
-def web_save_job(job_id: int):
-    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
-    if row:
-        mark_job_interaction(row[0][0], "saved")
-    return redirect(request.referrer or url_for("web_jobs"))
-
-
-@app.route("/unsave/<int:job_id>", methods=["POST"])
-def web_unsave_job(job_id: int):
-    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
-    if row:
-        remove_job_interaction_web(row[0][0], "saved")
-    return redirect(request.referrer or url_for("web_saved"))
-
-
-@app.route("/apply/<int:job_id>", methods=["POST"])
-def web_apply_job(job_id: int):
-    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
-    if row:
-        mark_job_interaction(row[0][0], "applied")
-    return redirect(request.referrer or url_for("web_applied_page"))
-
-# ──────────────────────────────────────────────────────────────────────────────
-# BROADER MARKET COVERAGE + STRONGER SINGLE-JOB PAGE DETECTION
-# Paste this block ABOVE the "Startup" section.
-# It safely extends the current working script.
-# ──────────────────────────────────────────────────────────────────────────────
-
-EXTRA_PRODUCTION_KEYWORDS = [
-    "post production runner",
-    "post-production runner",
-    "post production assistant",
-    "post-production assistant",
-    "post production coordinator",
-    "post-production coordinator",
-    "studio runner",
-    "studio assistant",
-    "studio production assistant",
-    "production services coordinator",
-    "production operations",
-    "production operations intern",
-    "production management placement",
-    "production management placement intern",
-    "development trainee",
-    "team assistant",
-    "assistant producer",
-    "production trainee",
-    "production administrator",
-    "production admin",
-]
-
-BROAD_MARKET_SOURCES = [
-    {
-        "name": "Studio RM Runner",
-        "company": "Studio RM",
-        "kind": "studio",
-        "priority": 2,
-        "type": "html",
-        "url": "https://studio-rm.com/careers/runner",
-    },
-    {
-        "name": "If You Could Jobs",
-        "company": "If You Could",
-        "kind": "industry_board",
-        "priority": 3,
-        "type": "html",
-        "url": "https://www.ifyoucouldjobs.com/jobs",
-    },
-    {
-        "name": "Bright Network Creative",
-        "company": "Bright Network",
-        "kind": "industry_board",
-        "priority": 3,
-        "type": "html",
-        "url": "https://www.brightnetwork.co.uk/graduate-jobs/publicis-groupe/post-production-runner-1",
-    },
-    {
-        "name": "ProductionBase VFX",
-        "company": "ProductionBase",
-        "kind": "industry_board",
-        "priority": 3,
-        "type": "html",
-        "url": "https://www.productionbase.co.uk/film-tv-jobs/production-assistant--vfx-london-07.24.0238231",
-    },
-    {
-        "name": "EntertainmentCareers London",
-        "company": "EntertainmentCareers",
-        "kind": "industry_board",
-        "priority": 3,
-        "type": "html",
-        "url": "https://www.entertainmentcareers.net/jobs/s/production-assistant/london-uk/",
-    },
-]
-
-# Merge extra keywords into the existing defaults before seed_defaults/init_db runs
-try:
-    for _kw in EXTRA_PRODUCTION_KEYWORDS:
-        if _kw not in DEFAULT_KEYWORDS:
-            DEFAULT_KEYWORDS.append(_kw)
-except Exception:
-    pass
-
-# Merge broader-market sources into the existing defaults before seed_defaults/init_db runs
-try:
-    _existing_default_urls = {s.get("url") for s in DEFAULT_SOURCES}
-    for _src in BROAD_MARKET_SOURCES:
-        if _src.get("url") not in _existing_default_urls:
-            DEFAULT_SOURCES.append(_src)
-except Exception:
-    pass
-
-# Additional heuristics for broad-market single-role pages
-_BROAD_MARKET_SINGLE_PAGE_SIGNALS = {
-    "apply", "apply now", "how to apply", "send your cv", "send cv", "email your cv",
-    "email cv", "job description", "responsibilities", "requirements", "qualifications",
-    "about the role", "what you'll do", "what you will do", "the role",
-    "part time", "part-time", "full time", "full-time", "contract", "permanent",
-    "freelance", "location", "salary", "reporting to", "experience", "skills",
-    "closing date", "benefits",
-}
-
-_GENERIC_INDEX_PAGE_TITLES = {
-    "jobs", "careers", "opportunities", "vacancies", "job board",
-    "careers, skills and jobs", "skills", "navigation", "main navigation",
-    "learn more", "browse roles", "current opportunities", "job listings",
-    "find out more", "view all jobs", "open roles", "all jobs", "current vacancies",
-    "search jobs", "find jobs",
-}
-
-_SINGLE_JOB_TITLE_HINTS = {
-    "runner", "production", "coordinator", "assistant", "intern",
-    "trainee", "post production", "post-production", "studio"
-}
-
-_BROAD_MARKET_BLOCKED_PATH_SNIPPETS = [
-    "/contact", "/about", "/team", "/news", "/blog", "/privacy", "/terms",
-    "/cookies", "/members", "/membership", "/resources",
-]
-
-def _safe_meta_content(soup, attrs):
-    try:
-        tag = soup.find("meta", attrs=attrs)
-        return clean_text(tag.get("content", "")) if tag else ""
-    except Exception:
-        return ""
-
-def _extract_jsonld_jobposting(soup):
-    try:
-        scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
-        for script in scripts:
-            raw = script.string or script.get_text(" ", strip=True) or ""
-            if not raw:
-                continue
-            try:
-                data = json.loads(raw)
-            except Exception:
-                continue
-
-            candidates = data if isinstance(data, list) else [data]
-            for item in candidates:
-                if not isinstance(item, dict):
-                    continue
-                item_type = str(item.get("@type", "")).lower()
-                if item_type == "jobposting":
-                    title = clean_text(item.get("title", ""))
-                    desc_html = item.get("description", "") or ""
-                    desc = clean_text(BeautifulSoup(desc_html, "html.parser").get_text(" ", strip=True))
-                    loc = ""
-                    job_loc = item.get("jobLocation")
-                    if isinstance(job_loc, dict):
-                        addr = job_loc.get("address")
-                        if isinstance(addr, dict):
-                            loc = clean_text(" ".join([
-                                str(addr.get("addressLocality", "") or ""),
-                                str(addr.get("addressRegion", "") or ""),
-                                str(addr.get("addressCountry", "") or ""),
-                            ]))
-                    elif isinstance(job_loc, list) and job_loc:
-                        addr = job_loc[0].get("address", {}) if isinstance(job_loc[0], dict) else {}
-                        if isinstance(addr, dict):
-                            loc = clean_text(" ".join([
-                                str(addr.get("addressLocality", "") or ""),
-                                str(addr.get("addressRegion", "") or ""),
-                                str(addr.get("addressCountry", "") or ""),
-                            ]))
-                    return {
-                        "title": title,
-                        "description": desc,
-                        "location": loc,
-                        "has_jobposting": True,
-                    }
-    except Exception:
-        pass
-    return {
-        "title": "",
-        "description": "",
-        "location": "",
-        "has_jobposting": False,
-    }
-
-def _looks_like_generic_index_page(title: str, body: str, url: str) -> bool:
-    low_title = normalize_text(title)
-    low_body = normalize_text(body)
-    low_url = (url or "").lower()
-
-    if low_title in _GENERIC_INDEX_PAGE_TITLES:
-        return True
-
-    if any(snippet in low_url for snippet in _BROAD_MARKET_BLOCKED_PATH_SNIPPETS):
-        return True
-
-    if (
-        any(x in low_title for x in ["careers", "jobs", "skills", "opportunities", "vacancies"])
-        and not any(h in low_body for h in _SINGLE_JOB_TITLE_HINTS)
-    ):
-        return True
-
-    return False
-
-def _looks_like_single_job_page(title: str, body: str, url: str) -> bool:
-    low_title = normalize_text(title)
-    low_body = normalize_text(body)
-    low_url = (url or "").lower()
-
-    if not title or len(title) < 4:
-        return False
-
-    if _looks_like_generic_index_page(title, body, url):
-        return False
-
-    title_signal = any(h in low_title for h in _SINGLE_JOB_TITLE_HINTS)
-    body_signal = any(s in low_body for s in _BROAD_MARKET_SINGLE_PAGE_SIGNALS)
-
-    if title_signal and body_signal:
-        return True
-
-    if body_signal and any(h in low_body for h in _SINGLE_JOB_TITLE_HINTS):
-        return True
-
-    if any(h.replace(" ", "-") in low_url for h in _SINGLE_JOB_TITLE_HINTS) and body_signal:
-        return True
-
-    return False
-
-def _extract_best_h1_h2_title(soup) -> str:
-    candidates = []
-    for tag_name in ["h1", "h2", "title"]:
-        for el in soup.find_all(tag_name):
-            txt = clean_text(el.get_text(" ", strip=True))
-            if txt and len(txt) >= 4:
-                candidates.append(txt)
-
-    def _score(txt: str) -> int:
-        low = normalize_text(txt)
-        score = 0
-        if low in _GENERIC_INDEX_PAGE_TITLES:
-            score -= 100
-        if 8 <= len(txt) <= 120:
-            score += 10
-        if any(h in low for h in _SINGLE_JOB_TITLE_HINTS):
-            score += 40
-        if any(x in low for x in ["production", "runner", "coordinator", "assistant", "intern", "trainee"]):
-            score += 20
-        return score
-
-    return max(candidates, key=_score) if candidates else ""
-
-def _extract_main_text_block(soup) -> str:
-    for sel in ["main", "article", "[role='main']"]:
-        try:
-            el = soup.select_one(sel)
-            if el:
-                txt = clean_text(el.get_text(" ", strip=True))
-                if len(txt) > 120:
-                    return txt[:4000]
-        except Exception:
-            pass
-
-    body = soup.body or soup
-    txt = clean_text(body.get_text(" ", strip=True))
-    return txt[:4000]
-
-def _extract_single_job_from_page(source: dict, soup, page_url: str):
-    jsonld = _extract_jsonld_jobposting(soup)
-    meta_desc = _safe_meta_content(soup, {"name": "description"}) or _safe_meta_content(soup, {"property": "og:description"})
-    title = jsonld["title"] or _extract_best_h1_h2_title(soup)
-    body = clean_text(" ".join(filter(None, [
-        jsonld["description"],
-        meta_desc,
-        _extract_main_text_block(soup),
-    ])))
-    location = jsonld["location"] or detect_location(f"{title} {body} {page_url}", company=source["company"])
-
-    if jsonld["has_jobposting"]:
-        return [{
-            "title": title or source["name"],
-            "company": source["company"],
-            "location": location,
-            "url": canonicalize_url(page_url),
-            "body": body[:2000],
-        }]
-
-    if not _looks_like_single_job_page(title, body, page_url):
-        return []
-
-    return [{
-        "title": title or source["name"],
-        "company": source["company"],
-        "location": location,
-        "url": canonicalize_url(page_url),
-        "body": body[:2000],
-    }]
-
-def _extract_board_cards_from_soup(source: dict, soup):
-    jobs = []
-    seen = set()
-
-    card_selectors = [
-        "article", "li", ".job", ".job-card", ".job-item", ".vacancy",
-        ".listing", ".role", ".search-result", ".result", ".post"
-    ]
-
-    cards = []
-    for sel in card_selectors:
-        try:
-            cards.extend(soup.select(sel))
-        except Exception:
-            pass
-
-    if len(cards) < 5:
-        cards = soup.find_all("a", href=True)
-
-    for card in cards:
-        try:
-            text = clean_text(card.get_text(" ", strip=True))
-        except Exception:
-            continue
-        low_text = normalize_text(text)
-
-        if len(text) < 20:
-            continue
-        if any(b in low_text for b in ["cookie", "privacy", "terms", "navigation", "subscribe"]):
-            continue
-        if not any(h in low_text for h in _SINGLE_JOB_TITLE_HINTS):
-            continue
-
-        href = ""
-        if getattr(card, "name", None) == "a":
-            href = card.get("href", "")
-        else:
-            a = card.find("a", href=True)
-            href = a.get("href", "") if a else ""
-
-        full_url = canonicalize_url(urljoin(source["url"], href)) if href else canonicalize_url(source["url"])
-        if not full_url:
-            continue
-        if is_malformed_url(full_url):
-            continue
-
-        title = ""
-        if hasattr(card, "find_all"):
-            title = _extract_best_h1_h2_title(card)
-        if not title:
-            lines = [clean_text(x) for x in re.split(r"[•\n\r]+", text) if clean_text(x)]
-            title = lines[0] if lines else source["name"]
-
-        low_title = normalize_text(title)
-        if low_title in _GENERIC_INDEX_PAGE_TITLES:
-            continue
-        if not any(h in low_title or h in low_text for h in _SINGLE_JOB_TITLE_HINTS):
-            continue
-
-        key = short_hash(full_url, title)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        jobs.append({
-            "title": title,
-            "company": source["company"],
-            "location": detect_location(f"{title} {text} {full_url}", company=source["company"]),
-            "url": full_url,
-            "body": text[:1500],
-        })
-
-    return jobs
-
-# Override parse_html with broader single-page + board-aware behaviour
-def parse_html(source: dict):
-    try:
-        html = fetch_text(source["url"])
-        soup = BeautifulSoup(html, "html.parser")
-        discovered = discover_ats_sources_from_html(source, html)
-
-        # A) If the source page itself is a single job page, accept it directly
-        single_jobs = _extract_single_job_from_page(source, soup, source["url"])
-        if single_jobs:
-            return single_jobs, discovered
-
-        # B) Existing generic extraction
-        jobs = generic_extract_jobs_from_soup(source, soup)
-
-        # C) Board/card-style extraction fallback for broader-market pages
-        if not jobs:
-            jobs = _extract_board_cards_from_soup(source, soup)
-
-        return jobs, discovered
-
-    except requests.exceptions.Timeout:
-        raise RuntimeError("timeout")
-    except requests.exceptions.HTTPError as e:
-        raise RuntimeError(f"http_error:{e.response.status_code if e.response else '?'}")
-
-# Slightly broader keyword matching: title + body + URL
-def title_keyword_match(job: CanonicalJob):
-    title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
-    if any(ex in title_hay for ex in get_excludes()):
-        return False, None
-
-    full_hay = normalize_text(f"{job.title} {job.description_text or ''} {job.apply_url or ''}")
-    matched = next((kw for kw in get_keywords() if kw in full_hay), None)
-    return (True, matched) if matched else (False, None)
-
-# Broader role explanations
-def explain_role(title: str) -> str:
-    low = normalize_text(title)
-
-    if "production coordinator" in low:
-        return (
-            "Production Coordinator\n\n"
-            "Typical responsibilities include:\n"
-            "• helping manage schedules\n"
-            "• coordinating teams and deliveries\n"
-            "• supporting producers across a project\n\n"
-            "This is a common early-career role in VFX and post-production."
-        )
-
-    if "production assistant" in low:
-        return (
-            "Production Assistant\n\n"
-            "Typical responsibilities include:\n"
-            "• supporting the production team day to day\n"
-            "• handling admin, logistics and organisation\n"
-            "• helping projects run smoothly\n\n"
-            "This is a common entry route into production."
-        )
-
-    if "runner" in low:
-        return (
-            "Runner\n\n"
-            "Typical responsibilities include:\n"
-            "• helping the studio with day-to-day support tasks\n"
-            "• assisting teams, bookings and office operations\n"
-            "• getting exposure to how production works\n\n"
-            "Runner roles are often an early step into post-production and VFX."
-        )
-
-    if "assistant producer" in low:
-        return (
-            "Assistant Producer\n\n"
-            "Typical responsibilities include:\n"
-            "• supporting producers with planning and coordination\n"
-            "• helping manage timelines and communication\n"
-            "• assisting with delivery and client-facing admin\n\n"
-            "This can be a good progression role after assistant or coordinator work."
-        )
-
-    if "team assistant" in low:
-        return (
-            "Team Assistant\n\n"
-            "Typical responsibilities include:\n"
-            "• supporting a team with coordination and admin\n"
-            "• managing schedules, meetings and organisation\n"
-            "• helping day-to-day operations run smoothly\n\n"
-            "Depending on the team, this can be a relevant entry path into production."
-        )
-
-    if "post production" in low:
-        return (
-            "Post Production role\n\n"
-            "This role likely supports editing, finishing, delivery or post-production operations.\n\n"
-            "Typical responsibilities include:\n"
-            "• coordinating deliveries and schedules\n"
-            "• helping the post team stay organised\n"
-            "• supporting day-to-day operations\n\n"
-            "This can be a strong entry route into post-production."
-        )
-
-    return (
-        f"{title.title()}\n\n"
-        "This looks like a production-support opportunity.\n"
-        "It likely involves organisation, coordination, and helping projects or teams run smoothly.\n\n"
-        "It may be relevant as an early-career route into VFX, animation or post-production."
-    )
 
 # ── Startup ────────────────────────────────────────────────────────────────────
 
