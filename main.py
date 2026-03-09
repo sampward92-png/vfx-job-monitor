@@ -2382,56 +2382,96 @@ def monitor_loop():
             set_state("last_checked", now_str())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
-# ── Flask ──────────────────────────────────────────────────────────────────────
+# ── Flask ──────────────────────────────────────────────────────────────────────────────
 # ── Web UI helpers ─────────────────────────────────────────────────────────────
 
-_CSS = """
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       background: #0f0f0f; color: #e8e8e8; min-height: 100vh; }
-a { color: #a78bfa; text-decoration: none; }
-a:hover { text-decoration: underline; }
-.nav { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 14px 24px;
-       display: flex; align-items: center; gap: 28px; }
-.nav-title { font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
-.nav a { font-size: 13px; color: #9ca3af; }
-.nav a:hover { color: #e8e8e8; text-decoration: none; }
-.page { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
-.overview { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; }
-.stat { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
-        padding: 16px 20px; flex: 1; min-width: 120px; }
-.stat-val { font-size: 26px; font-weight: 700; color: #fff; }
-.stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
-.section-title { font-size: 13px; font-weight: 600; color: #6b7280;
-                 letter-spacing: 0.08em; text-transform: uppercase;
-                 margin-bottom: 14px; }
-.job-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px;
-            padding: 18px 20px; margin-bottom: 10px; }
-.job-card:hover { border-color: #3a3a3a; }
-.job-type { display: inline-block; font-size: 11px; font-weight: 600;
-            border-radius: 4px; padding: 2px 8px; margin-bottom: 8px; }
-.type-direct { background: #1e1b4b; color: #a78bfa; }
-.type-prog   { background: #1a2e1a; color: #6ee7b7; }
-.job-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-.job-meta { font-size: 13px; color: #9ca3af; margin-bottom: 10px; }
-.job-meta span { margin-right: 14px; }
-.job-score { color: #fbbf24; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn { font-size: 12px; padding: 6px 12px; border-radius: 6px; border: none;
-       cursor: pointer; font-weight: 500; text-decoration: none; display: inline-block; }
-.btn-primary   { background: #a78bfa; color: #0f0f0f; }
-.btn-secondary { background: #2a2a2a; color: #d1d5db; }
-.btn-ghost     { background: transparent; color: #6b7280; border: 1px solid #2a2a2a; }
-.btn:hover { opacity: 0.85; text-decoration: none; }
-.empty { color: #4b5563; font-size: 14px; padding: 40px 0; text-align: center; }
-.coverage-row { display: flex; justify-content: space-between; align-items: center;
-                padding: 10px 0; border-bottom: 1px solid #1f1f1f; font-size: 13px; }
-.coverage-row:last-child { border-bottom: none; }
-.coverage-ok   { color: #6ee7b7; }
-.coverage-warn { color: #fbbf24; }
-.coverage-dead { color: #f87171; }
-.last-checked  { font-size: 12px; color: #4b5563; margin-top: 6px; }
-"""
+_CSS = (
+    "* { box-sizing: border-box; margin: 0; padding: 0; }\n"
+    "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;\n"
+    "       background: #0f0f0f; color: #e8e8e8; min-height: 100vh; }\n"
+    "a { color: #a78bfa; text-decoration: none; }\n"
+    "a:hover { text-decoration: underline; }\n"
+    ".nav { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 14px 24px;\n"
+    "       display: flex; align-items: center; gap: 24px;\n"
+    "       position: sticky; top: 0; z-index: 100; }\n"
+    ".nav-title { font-size: 15px; font-weight: 600; color: #fff;\n"
+    "             letter-spacing: 0.02em; margin-right: 4px; }\n"
+    ".nav a { font-size: 13px; color: #9ca3af; }\n"
+    ".nav a:hover { color: #e8e8e8; text-decoration: none; }\n"
+    ".page { max-width: 880px; margin: 0 auto; padding: 28px 20px; }\n"
+    ".overview { display: flex; gap: 12px; margin-bottom: 28px; flex-wrap: wrap; }\n"
+    ".stat { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;\n"
+    "        padding: 16px 20px; flex: 1; min-width: 120px;\n"
+    "        cursor: pointer; transition: border-color 0.15s; }\n"
+    ".stat:hover { border-color: #a78bfa; }\n"
+    ".stat-val { font-size: 28px; font-weight: 700; color: #fff; }\n"
+    ".stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }\n"
+    ".section-title { font-size: 12px; font-weight: 600; color: #6b7280;\n"
+    "                 letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }\n"
+    ".section-block { margin-bottom: 32px; }\n"
+    ".job-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px;\n"
+    "            padding: 16px 18px; margin-bottom: 8px; transition: border-color 0.15s; }\n"
+    ".job-card:hover { border-color: #3a3a3a; }\n"
+    ".card-badges { display: flex; gap: 6px; margin-bottom: 8px;\n"
+    "               flex-wrap: wrap; align-items: center; }\n"
+    ".badge { display: inline-block; font-size: 11px; font-weight: 600;\n"
+    "         border-radius: 4px; padding: 2px 8px; }\n"
+    ".badge-direct { background: #1e1b4b; color: #a78bfa; }\n"
+    ".badge-prog   { background: #1a2e1a; color: #6ee7b7; }\n"
+    ".badge-new    { background: #292010; color: #fbbf24; }\n"
+    ".badge-score  { background: #1f1f1f; color: #9ca3af; border: 1px solid #2a2a2a; }\n"
+    ".job-title { font-size: 16px; font-weight: 600; color: #fff;\n"
+    "             margin-bottom: 5px; line-height: 1.3; }\n"
+    ".job-meta { font-size: 13px; color: #6b7280; margin-bottom: 12px;\n"
+    "            display: flex; flex-wrap: wrap; gap: 0 16px; }\n"
+    ".actions { display: flex; gap: 8px; flex-wrap: wrap; }\n"
+    ".btn { font-size: 12px; padding: 7px 13px; border-radius: 6px; border: none;\n"
+    "       cursor: pointer; font-weight: 500; text-decoration: none;\n"
+    "       display: inline-block; transition: opacity 0.12s; }\n"
+    ".btn-primary   { background: #a78bfa; color: #0f0f0f; }\n"
+    ".btn-secondary { background: #2a2a2a; color: #d1d5db; }\n"
+    ".btn-ghost     { background: transparent; color: #6b7280; border: 1px solid #2a2a2a; }\n"
+    ".btn:hover { opacity: 0.8; text-decoration: none; }\n"
+    ".empty { color: #4b5563; font-size: 14px; padding: 40px 0; text-align: center; }\n"
+    ".coverage-row { display: flex; justify-content: space-between; align-items: center;\n"
+    "                padding: 10px 0; border-bottom: 1px solid #1f1f1f; font-size: 13px; }\n"
+    ".coverage-row:last-child { border-bottom: none; }\n"
+    ".coverage-ok   { color: #6ee7b7; }\n"
+    ".coverage-warn { color: #fbbf24; }\n"
+    ".coverage-dead { color: #f87171; }\n"
+    ".last-checked  { font-size: 12px; color: #4b5563; margin-top: 4px; margin-bottom: 24px; }\n"
+    ".filter-bar { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px;\n"
+    "              padding: 14px 16px; margin-bottom: 20px;\n"
+    "              display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }\n"
+    ".filter-bar input, .filter-bar select {\n"
+    "    background: #111; border: 1px solid #2a2a2a; color: #e8e8e8;\n"
+    "    border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none; }\n"
+    ".filter-bar input { flex: 1; min-width: 140px; }\n"
+    ".filter-bar select { min-width: 110px; }\n"
+    ".filter-bar input:focus, .filter-bar select:focus { border-color: #a78bfa; }\n"
+    ".filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }\n"
+    ".chip { background: #1e1b4b; color: #a78bfa; border-radius: 20px; font-size: 12px;\n"
+    "        padding: 3px 10px; }\n"
+    ".result-count { font-size: 13px; color: #4b5563; margin-bottom: 14px; }\n"
+    ".score-row { display: flex; justify-content: space-between; padding: 8px 0;\n"
+    "             border-bottom: 1px solid #1f1f1f; font-size: 13px; }\n"
+    ".score-row:last-child { border-bottom: none; }\n"
+    ".score-pos { color: #6ee7b7; }\n"
+    ".score-neg { color: #f87171; }\n"
+    ".score-zero { color: #4b5563; }\n"
+    "@media (max-width: 600px) {\n"
+    "  .nav { gap: 16px; padding: 12px 16px; flex-wrap: wrap; }\n"
+    "  .page { padding: 20px 14px; }\n"
+    "  .filter-bar { flex-direction: column; align-items: stretch; }\n"
+    "  .filter-bar input, .filter-bar select { min-width: unset; }\n"
+    "  .actions { gap: 6px; }\n"
+    "  .btn { padding: 8px 12px; }\n"
+    "}\n"
+    "\n"
+)
+
+
+_CSS = """ """ # replaced below
 
 def _nav(active=""):
     links = [("Home", "/"), ("Jobs", "/jobs"), ("Saved", "/saved"),
@@ -2441,93 +2481,244 @@ def _nav(active=""):
         f'{label}</a>'
         for label, url in links
     )
-    return (f'<nav class="nav"><span class="nav-title">🎬 VFX Job Monitor</span>' +
-            items + '</nav>')
+    return (f'<nav class="nav"><span class="nav-title">&#127916; VFX Monitor</span>'
+            + items + '</nav>')
 
 def _page(title, body, active=""):
     return (
-        f'<!doctype html><html><head><meta charset="utf-8">' +
-        f'<meta name="viewport" content="width=device-width,initial-scale=1">' +
-        f'<title>{title} – VFX Job Monitor</title>' +
-        f'<style>{_CSS}</style></head><body>' +
-        _nav(active) +
-        f'<div class="page">{body}</div></body></html>'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>{title} \u2013 VFX Job Monitor</title>'
+        f'<style>{_CSS}</style></head><body>'
+        + _nav(active)
+        + f'<div class="page">{body}</div></body></html>'
     )
 
-def _job_card(row, actions=True):
-    jid, title, company, loc, url, first_seen, score, opp_type, status = row
+def _is_new(first_seen_str):
+    if not first_seen_str:
+        return False
+    import datetime as _dt
+    try:
+        fs = _dt.datetime.fromisoformat(first_seen_str[:19])
+        return (_dt.datetime.utcnow() - fs).total_seconds() < 86400
+    except Exception:
+        return False
+
+def _job_card(row, actions=True, back_url="/jobs"):
+    jid, title, company, loc, url, first_seen, score, opp_type, status = row[:9]
     loc_str   = prettify_location(loc) if loc else "Location unknown"
     is_prog   = (opp_type == "programme") or any(
-        t in title.lower() for t in ["intern","trainee","scheme","programme","launchpad","work experience"]
+        t in (title or "").lower() for t in ["intern","trainee","scheme","programme","launchpad","work experience"]
     )
-    type_cls  = "type-prog" if is_prog else "type-direct"
+    type_cls  = "badge-prog" if is_prog else "badge-direct"
     type_lbl  = "Programme" if is_prog else "Direct role"
     score_int = int(score or 0)
     date_str  = (first_seen or "")[:10]
+    new_badge = '<span class="badge badge-new">New today</span>' if _is_new(first_seen or "") else ""
+    score_badge = f'<span class="badge badge-score">Score {score_int}</span>'
     action_html = ""
     if actions:
-        open_btn  = (f'<a class="btn btn-primary" href="{url}" target="_blank">Open job</a>'
+        open_btn  = (f'<a class="btn btn-primary" href="{url}" target="_blank">Open job &#8599;</a>'
                      if url and url.startswith("http") else "")
-        view_btn  = f'<a class="btn btn-secondary" href="/job/{jid}">View</a>'
+        view_btn  = f'<a class="btn btn-secondary" href="/job/{jid}">Why matched</a>'
         save_btn  = f'<a class="btn btn-ghost" href="/save/{jid}">Save</a>'
         apply_btn = f'<a class="btn btn-ghost" href="/applied_mark/{jid}">Mark applied</a>'
-        action_html = f'<div class="actions">{view_btn}{open_btn}{save_btn}{apply_btn}</div>'
+        action_html = f'<div class="actions">{open_btn}{view_btn}{save_btn}{apply_btn}</div>'
     return (
-        f'<div class="job-card">' +
-        f'<span class="job-type {type_cls}">{type_lbl}</span>' +
-        f'<div class="job-title">{title}</div>' +
-        f'<div class="job-meta">' +
-        f'<span>{company}</span>' +
-        f'<span class="job-score">⭐ {score_int}</span>' +
-        f'<span>📍 {loc_str}</span>' +
-        f'<span>First seen: {date_str}</span>' +
-        f'</div>' +
-        action_html +
+        f'<div class="job-card">'
+        f'<div class="card-badges">'
+        f'<span class="badge {type_cls}">{type_lbl}</span>'
+        + new_badge + score_badge +
+        f'</div>'
+        f'<div class="job-title">{title}</div>'
+        f'<div class="job-meta"><span>{company}</span><span>&#128205; {loc_str}</span>'
+        f'<span>First seen: {date_str}</span></div>'
+        + action_html +
         f'</div>'
     )
 
-# ── Flask routes ────────────────────────────────────────────────────────────────
+def _score_explanation(bd_json):
+    import json as _json
+    try:
+        bd = _json.loads(bd_json) if bd_json else {}
+    except Exception:
+        bd = {}
+    if not bd:
+        return '<p class="empty">No score data available.</p>'
+    labels = {
+        "title_strength":      ("Title match",         "How well the job title matches production keywords"),
+        "juniority":           ("Entry-level signals",  "Words like junior, assistant, graduate, intern"),
+        "location_confidence": ("Location match",       "London / UK location indicators"),
+        "source_quality":      ("Source quality",       "Tier of the studio or board"),
+        "ats_type":            ("ATS bonus",            "Trusted application system"),
+        "company_tier":        ("Preferred studio",     "Top-tier studio bonus"),
+        "negative_indicators": ("Senior role penalty",  "Words like senior, director, supervisor"),
+    }
+    rows_html = ""
+    for key, (label, desc) in labels.items():
+        pts = bd.get(key, 0)
+        cls  = "score-pos" if pts > 0 else ("score-neg" if pts < 0 else "score-zero")
+        sign = "+" if pts > 0 else ""
+        rows_html += (
+            f'<div class="score-row">'
+            f'<span style="color:#e8e8e8">{label} '
+            f'<span style="color:#4b5563;font-size:12px">({desc})</span></span>'
+            f'<span class="{cls}">{sign}{int(pts)}</span></div>'
+        )
+    total = int(bd.get("total", 0))
+    return (
+        '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:4px 16px">'
+        + rows_html
+        + f'<div class="score-row"><span style="color:#fff;font-weight:600">Total score</span>'
+          f'<span style="color:#fbbf24;font-weight:600">{total}</span></div>'
+        + '</div>'
+    )
+
+# \u2500\u2500 Flask routes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 @app.route("/")
 def home():
-    total  = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-    direct = (db_execute(
-        "SELECT COUNT(*) FROM jobs WHERE job_status='active' AND opportunity_type!='programme'",
+    from datetime import datetime as _dt2, timedelta
+    cutoff  = (_dt2.utcnow() - timedelta(hours=24)).isoformat()
+    total    = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    new_ct   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND first_seen > ?",
+                           (cutoff,), fetch=True) or [[0]])[0][0]
+    saved_ct = (db_execute(
+        "SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='saved'",
         fetch=True) or [[0]])[0][0]
-    prog   = (db_execute(
-        "SELECT COUNT(*) FROM jobs WHERE job_status='active' AND opportunity_type='programme'",
+    applied_ct = (db_execute(
+        "SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='applied'",
         fetch=True) or [[0]])[0][0]
-    last   = get_state("last_checked", "Never")
-    rows   = db_execute(
+    last = get_state("last_checked", "Never")
+
+    new_rows = db_execute(
         """SELECT id, title, company, location_raw, apply_url, first_seen, score,
-                  opportunity_type, job_status
-           FROM jobs WHERE job_status='active'
-           ORDER BY score DESC, id DESC LIMIT 10""",
-        fetch=True,
-    ) or []
-    stats = (
-        f'<div class="overview">' +
-        f'<div class="stat"><div class="stat-val">{total}</div><div class="stat-label">Active jobs</div></div>' +
-        f'<div class="stat"><div class="stat-val">{direct}</div><div class="stat-label">Direct roles</div></div>' +
-        f'<div class="stat"><div class="stat-val">{prog}</div><div class="stat-label">Programmes</div></div>' +
-        f'</div>' +
+                  opportunity_type, job_status FROM jobs
+           WHERE job_status='active' AND first_seen > ?
+           ORDER BY score DESC, id DESC LIMIT 6""",
+        (cutoff,), fetch=True) or []
+    hi_rows = db_execute(
+        """SELECT id, title, company, location_raw, apply_url, first_seen, score,
+                  opportunity_type, job_status FROM jobs
+           WHERE job_status='active' AND opportunity_type != 'programme'
+           ORDER BY score DESC, id DESC LIMIT 5""",
+        fetch=True) or []
+    prog_rows = db_execute(
+        """SELECT id, title, company, location_raw, apply_url, first_seen, score,
+                  opportunity_type, job_status FROM jobs
+           WHERE job_status='active' AND opportunity_type = 'programme'
+           ORDER BY score DESC, id DESC LIMIT 4""",
+        fetch=True) or []
+
+    stats_html = (
+        f'<div class="overview">'
+        f'<a href="/jobs" class="stat" style="text-decoration:none">'
+        f'<div class="stat-val">{total}</div><div class="stat-label">Active jobs</div></a>'
+        f'<a href="/jobs?type=direct" class="stat" style="text-decoration:none">'
+        f'<div class="stat-val">{new_ct}</div><div class="stat-label">New today</div></a>'
+        f'<a href="/saved" class="stat" style="text-decoration:none">'
+        f'<div class="stat-val">{saved_ct}</div><div class="stat-label">Saved</div></a>'
+        f'<a href="/applied" class="stat" style="text-decoration:none">'
+        f'<div class="stat-val">{applied_ct}</div><div class="stat-label">Applied</div></a>'
+        f'</div>'
         f'<p class="last-checked">Last checked: {last}</p>'
     )
-    cards = "".join(_job_card(r) for r in rows) if rows else '<p class="empty">No active matches yet. Scans run automatically every 10 minutes.</p>'
-    body  = stats + '<br><div class="section-title">Today&#39;s overview</div>' + cards
+
+    def _section(heading, rows, empty_msg):
+        if not rows:
+            return (f'<div class="section-block"><div class="section-title">{heading}</div>'
+                    f'<p class="empty" style="padding:16px 0">{empty_msg}</p></div>')
+        cards = "".join(_job_card(r) for r in rows)
+        return f'<div class="section-block"><div class="section-title">{heading}</div>{cards}</div>'
+
+    body = (
+        stats_html
+        + _section("New today", new_rows, "Nothing new in the last 24 hours.")
+        + _section("High priority direct roles", hi_rows, "No direct roles found yet.")
+        + _section("Programmes &amp; internships", prog_rows, "No programmes found yet.")
+    )
     return _page("Home", body, "Home")
 
 @app.route("/jobs")
 def jobs_page():
-    rows = db_execute(
-        """SELECT id, title, company, location_raw, apply_url, first_seen, score,
-                  opportunity_type, job_status
-           FROM jobs WHERE job_status='active'
-           ORDER BY score DESC, id DESC LIMIT 50""",
-        fetch=True,
-    ) or []
-    cards = "".join(_job_card(r) for r in rows) if rows else '<p class="empty">No active matches yet.</p>'
-    body  = f'<div class="section-title">All active jobs ({len(rows)})</div>' + cards
+    from flask import request as _req
+    q             = (_req.args.get("q", "") or "").strip()
+    company       = (_req.args.get("company", "") or "").strip()
+    min_score_raw = (_req.args.get("score", "0") or "0").strip()
+    opp_type      = (_req.args.get("type", "all") or "all").strip()
+    loc_mode      = (_req.args.get("loc", "all") or "all").strip()
+    try:
+        min_score_int = int(min_score_raw)
+    except ValueError:
+        min_score_int = 0
+
+    conditions, params = ["j.job_status='active'"], []
+    if q:
+        conditions.append("(j.title LIKE ? OR j.company LIKE ?)")
+        params += [f"%{q}%", f"%{q}%"]
+    if company:
+        conditions.append("j.company = ?")
+        params.append(company)
+    if min_score_int > 0:
+        conditions.append("j.score >= ?")
+        params.append(min_score_int)
+    if opp_type == "direct":
+        conditions.append("j.opportunity_type != 'programme'")
+    elif opp_type == "programme":
+        conditions.append("j.opportunity_type = 'programme'")
+    if loc_mode == "london":
+        conditions.append("(LOWER(j.location_raw) LIKE '%london%')")
+    elif loc_mode == "uk":
+        conditions.append("j.location_raw NOT LIKE '%Non-UK%'")
+
+    where = " AND ".join(conditions)
+    rows  = db_execute(
+        f"""SELECT j.id, j.title, j.company, j.location_raw, j.apply_url,
+                   j.first_seen, j.score, j.opportunity_type, j.job_status
+            FROM jobs j WHERE {where}
+            ORDER BY j.score DESC, j.id DESC LIMIT 80""",
+        tuple(params), fetch=True) or []
+
+    all_cos = db_execute("SELECT DISTINCT company FROM jobs WHERE job_status='active' ORDER BY company",
+                         fetch=True) or []
+    co_opts = '<option value="">All companies</option>' + "".join(
+        f'<option value="{r[0]}" {"selected" if r[0]==company else ""}>{r[0]}</option>'
+        for r in all_cos)
+    score_opts = "".join(
+        f'<option value="{v}" {"selected" if str(v)==str(min_score_int) else ""}>{lbl}</option>'
+        for v, lbl in [("0","Any score"),("30","30+"),("50","50+"),("70","70+"),("90","90+")])
+    type_opts = "".join(
+        f'<option value="{v}" {"selected" if v==opp_type else ""}>{lbl}</option>'
+        for v, lbl in [("all","All types"),("direct","Direct roles"),("programme","Programmes")])
+    loc_opts = "".join(
+        f'<option value="{v}" {"selected" if v==loc_mode else ""}>{lbl}</option>'
+        for v, lbl in [("all","All locations"),("london","London"),("uk","UK")])
+
+    filter_bar = (
+        f'<form method="get" action="/jobs" class="filter-bar">'
+        f'<input name="q" placeholder="Search title or company..." value="{q}">'
+        f'<select name="company">{co_opts}</select>'
+        f'<select name="score">{score_opts}</select>'
+        f'<select name="type">{type_opts}</select>'
+        f'<select name="loc">{loc_opts}</select>'
+        f'<button type="submit" class="btn btn-primary">Filter</button>'
+        f'<a href="/jobs" class="btn btn-ghost">Clear</a>'
+        f'</form>'
+    )
+    active_chips = []
+    if q:          active_chips.append(f"Search: {q}")
+    if company:    active_chips.append(company)
+    if min_score_int > 0: active_chips.append(f"Score {min_score_int}+")
+    if opp_type != "all": active_chips.append(opp_type.title())
+    if loc_mode != "all": active_chips.append(loc_mode.title())
+    chips_html = ('<div class="filter-chips">' +
+                  "".join(f'<span class="chip">{c}</span>' for c in active_chips) +
+                  '</div>') if active_chips else ""
+
+    n = len(rows)
+    count_html = f'<p class="result-count">{n} job{"s" if n != 1 else ""} found</p>'
+    cards = "".join(_job_card(r) for r in rows) if rows else '<p class="empty">No jobs match these filters right now.</p>'
+    body  = filter_bar + chips_html + count_html + cards
     return _page("Jobs", body, "Jobs")
 
 @app.route("/saved")
@@ -2535,44 +2726,39 @@ def saved_page():
     rows = db_execute(
         """SELECT j.id, j.title, j.company, j.location_raw, j.apply_url,
                   j.first_seen, j.score, j.opportunity_type, j.job_status
-           FROM job_interactions ji
-           JOIN jobs j ON j.unique_key = ji.unique_key
-           WHERE ji.action='saved'
-           ORDER BY ji.actioned_at DESC LIMIT 30""",
-        fetch=True,
-    ) or []
-    cards = "".join(_job_card(r) for r in rows) if rows else '<p class="empty">No saved jobs yet. Use the Save button on any job card.</p>'
-    body  = f'<div class="section-title">Saved jobs ({len(rows)})</div>' + cards
-    return _page("Saved", body, "Saved")
+           FROM job_interactions ji JOIN jobs j ON j.unique_key = ji.unique_key
+           WHERE ji.action='saved' ORDER BY ji.actioned_at DESC LIMIT 30""",
+        fetch=True) or []
+    cards = "".join(_job_card(r) for r in rows) if rows else '<p class="empty">No saved jobs yet.</p>'
+    return _page("Saved", f'<div class="section-title">Saved ({len(rows)})</div>' + cards, "Saved")
 
 @app.route("/applied")
 def applied_page():
     rows = db_execute(
         """SELECT j.id, j.title, j.company, j.location_raw, j.apply_url,
                   j.first_seen, j.score, j.opportunity_type, j.job_status
-           FROM job_interactions ji
-           JOIN jobs j ON j.unique_key = ji.unique_key
-           WHERE ji.action='applied'
-           ORDER BY ji.actioned_at DESC LIMIT 30""",
-        fetch=True,
-    ) or []
-    cards = "".join(_job_card(r, actions=False) for r in rows) if rows else '<p class="empty">No applications tracked yet. Use "Mark applied" on any job card.</p>'
-    body  = f'<div class="section-title">Applied jobs ({len(rows)})</div>' + cards
-    return _page("Applied", body, "Applied")
+           FROM job_interactions ji JOIN jobs j ON j.unique_key = ji.unique_key
+           WHERE ji.action='applied' ORDER BY ji.actioned_at DESC LIMIT 30""",
+        fetch=True) or []
+    cards = "".join(_job_card(r, actions=False) for r in rows) if rows else '<p class="empty">No applications tracked yet.</p>'
+    return _page("Applied", f'<div class="section-title">Applied ({len(rows)})</div>' + cards, "Applied")
 
 @app.route("/job/<int:jid>")
 def job_detail(jid):
     row = db_execute(
         """SELECT id, title, company, location_raw, apply_url, first_seen, score,
-                  opportunity_type, job_status
+                  opportunity_type, job_status, score_breakdown_json
            FROM jobs WHERE id=?""",
-        (jid,), fetch=True,
-    )
+        (jid,), fetch=True)
     if not row:
         return _page("Not found", '<p class="empty">Job not found.</p>'), 404
-    card = _job_card(row[0])
-    body = f'<a href="/jobs" style="font-size:13px;color:#6b7280">← Back to jobs</a><br><br>' + card
-    return _page(row[0][1], body, "Jobs")
+    r    = row[0]
+    card = _job_card(r[:9])
+    why  = ('<div class="section-block"><div class="section-title">Why this matched</div>'
+            + _score_explanation(r[9]) + '</div>')
+    body = ('<a href="/jobs" style="font-size:13px;color:#6b7280">&#8592; Back to jobs</a>'
+            + '<br><br>' + card + '<br>' + why)
+    return _page(r[1], body, "Jobs")
 
 @app.route("/save/<int:jid>")
 def save_job(jid):
@@ -2595,13 +2781,11 @@ def coverage_page():
     rows = db_execute(
         """SELECT sh.source_name, sh.jobs_found_last, sh.jobs_found_total,
                   sh.last_success_at, sh.status, sh.last_event_type, s.company
-           FROM source_health sh
-           LEFT JOIN sources s ON s.name = sh.source_name
+           FROM source_health sh LEFT JOIN sources s ON s.name = sh.source_name
            ORDER BY sh.jobs_found_total DESC""",
-        fetch=True,
-    ) or []
+        fetch=True) or []
 
-    def friendly(status, evt):
+    def _friendly(status, evt):
         if status == "healthy" and evt == "success_nonzero": return ("Working normally", "coverage-ok")
         if status in ("healthy", "suspect") and evt == "success_zero": return ("No jobs found recently", "coverage-warn")
         if status == "degraded": return ("Needs attention", "coverage-warn")
@@ -2610,22 +2794,20 @@ def coverage_page():
 
     items = ""
     for name, last, total, last_ok, status, evt, company in rows:
-        label, cls = friendly(status, evt)
+        label, cls = _friendly(status, evt)
         display    = company or name
-        count_str  = f"{last or 0} last scan" if (last or 0) > 0 else ""
+        count_str  = (f"{last} last scan" if (last or 0) > 0 else "")
         items += (
-            f'<div class="coverage-row">' +
-            f'<span>{display}</span>' +
-            f'<span><span class="{cls}">{label}</span>' +
-            (f'  <span style="color:#4b5563;font-size:11px">{count_str}</span>' if count_str else "") +
-            f'</span></div>'
+            f'<div class="coverage-row"><span>{display}</span>'
+            f'<span><span class="{cls}">{label}</span>'
+            + (f' <span style="color:#4b5563;font-size:11px">{count_str}</span>' if count_str else "")
+            + '</span></div>'
         )
-
     n_src = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
     body  = (
-        f'<div class="section-title">{n_src} studios monitored</div>' +
-        (f'<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:4px 16px">' +
-         items + '</div>' if items else '<p class="empty">No coverage data yet. Run a scan first.</p>')
+        f'<div class="section-title">{n_src} studios monitored</div>'
+        + ('<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:4px 16px">'
+           + items + '</div>' if items else '<p class="empty">No coverage data yet.</p>')
     )
     return _page("Coverage", body, "Coverage")
 
