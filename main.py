@@ -463,6 +463,7 @@ def init_db():
             last_seen           TEXT,
             matched_keyword     TEXT,
             score               REAL,
+            opportunity_type    TEXT,
             score_breakdown_json TEXT,
             miss_count          INTEGER DEFAULT 0,
             job_status          TEXT DEFAULT 'active',
@@ -487,6 +488,7 @@ def init_db():
         ("external_job_id",      "TEXT"),
         ("posted_at",            "TEXT"),
         ("score_breakdown_json", "TEXT"),
+        ("opportunity_type", "TEXT"),
     ]
     for col, definition in migrations:
         if col not in existing_cols:
@@ -570,12 +572,27 @@ def init_db():
             except sqlite3.OperationalError:
                 pass
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS job_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            unique_key      TEXT NOT NULL,
+            event_type      TEXT NOT NULL,
+            event_at        TEXT NOT NULL,
+            old_value_json  TEXT,
+            new_value_json  TEXT,
+            source_name     TEXT,
+            notes           TEXT
+        )
+    """)
+
     # Indexes — safe to run repeatedly, match current query patterns
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_unique_key ON jobs(unique_key)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status     ON jobs(job_status)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score      ON jobs(score DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company    ON jobs(company)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_job_events_key     ON job_events(unique_key)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_job_events_at      ON job_events(event_at DESC)")
 
     conn.commit()
     conn.close()
@@ -720,15 +737,32 @@ def record_source_failure(source_name: str, error: str, event_type: str = "http_
 # ── Job expiry ────────────────────────────────────────────────────────────────
 
 def expire_stale_jobs(seen_keys: set):
-    active = db_execute("SELECT unique_key FROM jobs WHERE job_status='active'", fetch=True)
-    for (key,) in (active or []):
+    active_rows = db_execute(
+        """
+        SELECT unique_key, title, company, location_raw, location_normalized, apply_url,
+               canonical_url, source_name, source_type, ats_type, score, opportunity_type
+        FROM jobs WHERE job_status='active'
+        """,
+        fetch=True,
+    )
+    for row in (active_rows or []):
+        key = row[0]
         if key not in seen_keys:
-            db_execute("""
+            db_execute(
+                """
                 UPDATE jobs
                 SET miss_count = miss_count + 1,
                     job_status = CASE WHEN miss_count + 1 >= 3 THEN 'expired' ELSE job_status END
                 WHERE unique_key = ?
-            """, (key,))
+                """,
+                (key,),
+            )
+            status_row = db_execute("SELECT job_status FROM jobs WHERE unique_key=?", (key,), fetch=True)
+            if status_row and status_row[0][0] == 'expired' and not recent_event_exists(key, 'expired'):
+                old_snapshot = job_event_snapshot_from_db_row(row[1:] + ('active',))
+                new_snapshot = dict(old_snapshot)
+                new_snapshot['job_status'] = 'expired'
+                record_job_event(key, 'expired', old_snapshot.get('source_name', ''), old_snapshot, new_snapshot)
         else:
             db_execute("UPDATE jobs SET miss_count=0 WHERE unique_key=?", (key,))
 
@@ -970,6 +1004,10 @@ def opportunity_label(job: CanonicalJob) -> str:
     return "Programme / internship" if classify_opportunity(job) == "programme" else "Direct role"
 
 
+def format_command_chip(command: str, label: str) -> str:
+    return f"{command} — {label}"
+
+
 def prettify_location(loc: Optional[str]) -> str:
     if not loc:
         return "Location not listed"
@@ -983,43 +1021,46 @@ def prettify_location(loc: Optional[str]) -> str:
 
 
 def format_help_text() -> str:
-    return (
-        "🤖 VFX Job Monitor\n\n"
-        "What this bot does\n"
-        "• Watches VFX, animation and post-production job sources\n"
-        "• Looks for entry-level production-style roles in London / the UK\n"
-        "• Sends the strongest matches to Telegram\n\n"
-        "Start here\n"
-        "• /status — see whether the bot is running and how it is configured\n"
-        "• /scan — run a fresh scan now and send the top matches from this run\n"
-        "• /jobs — see the best active matches already saved in the database\n"
-        "• /scandebug — run a scan with source-by-source diagnostics\n\n"
-        "When to use each command\n"
-        "• /scan — use this when you want fresh results right now\n"
-        "• /jobs — use this when you want to browse what the bot already saved\n"
-        "• /latest — roles first seen in the last 24 hours\n"
-        "• /highpriority — strongest saved matches\n"
-        "• /search <term> — search saved jobs by title or company\n"
-        "• /showall — show the top stored matches in the database\n\n"
-        "Tuning the bot\n"
-        "• /setlocation london|uk|off — control location filtering\n"
-        "• /quality strict|normal|off — control how selective scoring is\n"
-        "• /keywords — show the current keyword list\n"
-        "• /addkeyword <phrase> — add a phrase to match\n"
-        "• /removekeyword <phrase> — remove a phrase\n\n"
-        "Operations and checks\n"
-        "• /sources — show monitored sources\n"
-        "• /health — summary of source health\n"
-        "• /dead — degraded, dead or suspect sources\n"
-        "• /pause /resume — stop or restart monitoring\n\n"
-        "Good default setup\n"
-        "• Keep /setlocation london for London-first roles\n"
-        "• Keep /quality normal for day-to-day alerts\n"
-        "• Use /quality off + /scandebug when tuning coverage\n\n"
-        "What the alerts mean\n"
-        "• Direct role — likely an actual job opening\n"
-        "• Programme / internship — useful junior-entry signal, but not always a direct vacancy\n"
-    )
+    return """🎬 VFX Job Monitor
+
+Welcome
+This bot watches VFX, animation and post-production hiring sources and highlights likely entry-level production opportunities.
+
+Start here
+• 🚀 /scan — run a fresh scan now and send the best results from this run
+• 🧭 /status — see whether the bot is running, how many sources are active, and your current settings
+• 🗂️ /jobs — browse the best active matches already saved by the bot
+• 🧪 /scandebug — run a scan with per-source diagnostics when testing coverage
+
+How to use it
+1. Run /scan when you want fresh results right now
+2. Use /jobs or /latest to browse what the bot has already saved
+3. Use /quality normal for everyday use
+4. Use /quality off + /scandebug only when tuning coverage
+
+Main commands
+• ✨ /latest — matches first seen in the last 24 hours
+• 🔥 /highpriority — strongest saved matches
+• 🔎 /search <term> — search saved jobs by title or company
+• 📚 /showall — show the top stored matches in the database
+• 🕘 /events — recent lifecycle changes such as created, updated, reopened, or expired
+
+Tuning
+• 📍 /setlocation london|uk|off — control location filtering
+• 🎚️ /quality strict|normal|off — control how selective the scoring is
+• 🧩 /keywords — show your current keyword list
+• ➕ /addkeyword <phrase> — add a phrase to match
+• ➖ /removekeyword <phrase> — remove a phrase
+
+Operations
+• 🛰️ /sources — monitored sources
+• 🩺 /health — source health summary
+• 🚨 /dead — degraded, suspect, or dead sources
+• ⏸️ /pause and ▶️ /resume — stop or restart monitoring
+
+Alert labels
+• 🎯 Direct role — likely a real vacancy
+• 🎓 Programme / internship — useful junior-entry signal, but not always a direct job"""
 
 
 
@@ -1283,61 +1324,187 @@ def build_unique_key(job: CanonicalJob) -> str:
         return f"url::{job.canonical_url}"
     return f"fp::{job.fingerprint}"
 
+def record_job_event(unique_key: str, event_type: str, source_name: str = "", old_value: Optional[dict] = None,
+                     new_value: Optional[dict] = None, notes: str = ""):
+    db_execute(
+        """
+        INSERT INTO job_events (unique_key, event_type, event_at, old_value_json, new_value_json, source_name, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            unique_key,
+            event_type,
+            now_str(),
+            json.dumps(old_value, ensure_ascii=False, default=str) if old_value else None,
+            json.dumps(new_value, ensure_ascii=False, default=str) if new_value else None,
+            source_name or "",
+            notes or "",
+        ),
+    )
+
+
+def score_band(score: float) -> str:
+    value = int(score or 0)
+    if value >= 75:
+        return "high"
+    if value >= 45:
+        return "normal"
+    return "low"
+
+
+def job_event_snapshot_from_job(job: CanonicalJob, status: str = "active") -> dict:
+    return {
+        "title": job.title,
+        "company": job.company,
+        "location_raw": job.location_raw,
+        "location_normalized": job.location_normalized,
+        "apply_url": job.apply_url,
+        "canonical_url": job.canonical_url,
+        "source_name": job.source_name,
+        "source_type": job.source_type,
+        "ats_type": job.ats_type,
+        "score": int(job.score or 0),
+        "opportunity_type": classify_opportunity(job),
+        "job_status": status,
+    }
+
+
+def job_event_snapshot_from_db_row(row) -> dict:
+    return {
+        "title": row[0],
+        "company": row[1],
+        "location_raw": row[2],
+        "location_normalized": row[3],
+        "apply_url": row[4],
+        "canonical_url": row[5],
+        "source_name": row[6],
+        "source_type": row[7],
+        "ats_type": row[8],
+        "score": int(row[9] or 0),
+        "opportunity_type": row[10] or "direct_role",
+        "job_status": row[11] or "active",
+    }
+
+
+def detect_material_changes(old_snapshot: dict, new_snapshot: dict) -> dict:
+    changes = {}
+    tracked_fields = [
+        "title",
+        "location_raw",
+        "location_normalized",
+        "apply_url",
+        "canonical_url",
+        "source_name",
+        "opportunity_type",
+        "job_status",
+    ]
+    for field in tracked_fields:
+        if (old_snapshot.get(field) or "") != (new_snapshot.get(field) or ""):
+            changes[field] = {"old": old_snapshot.get(field), "new": new_snapshot.get(field)}
+
+    old_band = score_band(old_snapshot.get("score", 0))
+    new_band = score_band(new_snapshot.get("score", 0))
+    if old_band != new_band:
+        changes["score_band"] = {"old": old_band, "new": new_band}
+
+    return changes
+
+
+def recent_event_exists(unique_key: str, event_type: str) -> bool:
+    rows = db_execute(
+        "SELECT event_type FROM job_events WHERE unique_key=? ORDER BY id DESC LIMIT 1",
+        (unique_key,), fetch=True
+    )
+    return bool(rows and rows[0][0] == event_type)
+
+
 def upsert_job(job: CanonicalJob) -> tuple[bool, str]:
     unique_key = build_unique_key(job)
     now        = now_str()
     existing   = db_execute(
-        "SELECT id, source_priority FROM jobs WHERE unique_key=?", (unique_key,), fetch=True
+        """
+        SELECT id, source_priority, title, company, location_raw, location_normalized, apply_url,
+               canonical_url, source_name, source_type, ats_type, score, opportunity_type, job_status
+        FROM jobs WHERE unique_key=?
+        """,
+        (unique_key,), fetch=True
     )
     bd_json = json.dumps(job.score_breakdown)
+    opp_type = classify_opportunity(job)
+    new_snapshot = job_event_snapshot_from_job(job, status='active')
 
     if not existing:
-        db_execute("""
+        db_execute(
+            """
             INSERT INTO jobs (
                 unique_key, canonical_url, fingerprint, title, company,
                 location_raw, location_normalized, description_text, department, employment_type,
                 apply_url, ats_type, external_job_id, posted_at,
                 source_name, source_kind, source_priority, source_type,
                 first_seen, last_seen, matched_keyword,
-                score, score_breakdown_json, miss_count, job_status, raw_blob
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'active',?)
-        """, (
-            unique_key, job.canonical_url, job.fingerprint, job.title, job.company,
-            job.location_raw, job.location_normalized, job.description_text,
-            job.department, job.employment_type,
-            job.apply_url, job.ats_type, job.external_job_id, job.posted_at,
-            job.source_name, job.source_kind, job.source_priority, job.source_type,
-            now, now, job.matched_keyword,
-            job.score, bd_json,
-            json.dumps(job.to_dict(), ensure_ascii=False, default=str)[:3000],
-        ))
+                score, opportunity_type, score_breakdown_json, miss_count, job_status, raw_blob
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'active',?)
+            """,
+            (
+                unique_key, job.canonical_url, job.fingerprint, job.title, job.company,
+                job.location_raw, job.location_normalized, job.description_text,
+                job.department, job.employment_type,
+                job.apply_url, job.ats_type, job.external_job_id, job.posted_at,
+                job.source_name, job.source_kind, job.source_priority, job.source_type,
+                now, now, job.matched_keyword,
+                job.score, opp_type, bd_json,
+                json.dumps(job.to_dict(), ensure_ascii=False, default=str)[:3000],
+            ),
+        )
+        record_job_event(unique_key, 'created', job.source_name, None, new_snapshot)
         return True, unique_key
-    else:
-        _, current_priority = existing[0]
-        if int(job.source_priority) < int(current_priority):
-            db_execute("""
-                UPDATE jobs SET
-                    canonical_url=?, fingerprint=?, title=?, company=?,
-                    location_raw=?, description_text=?, apply_url=?,
-                    ats_type=?, external_job_id=?, posted_at=?,
-                    source_name=?, source_kind=?, source_priority=?, source_type=?,
-                    last_seen=?, matched_keyword=?, score=?, score_breakdown_json=?,
-                    miss_count=0, job_status='active'
-                WHERE unique_key=?
-            """, (
+
+    row = existing[0]
+    current_priority = row[1]
+    old_snapshot = job_event_snapshot_from_db_row(row[2:])
+    was_expired = (old_snapshot.get('job_status') == 'expired')
+
+    if int(job.source_priority) < int(current_priority):
+        db_execute(
+            """
+            UPDATE jobs SET
+                canonical_url=?, fingerprint=?, title=?, company=?,
+                location_raw=?, location_normalized=?, description_text=?, apply_url=?,
+                ats_type=?, external_job_id=?, posted_at=?,
+                source_name=?, source_kind=?, source_priority=?, source_type=?,
+                last_seen=?, matched_keyword=?, score=?, opportunity_type=?, score_breakdown_json=?,
+                miss_count=0, job_status='active'
+            WHERE unique_key=?
+            """,
+            (
                 job.canonical_url, job.fingerprint, job.title, job.company,
-                job.location_raw, job.description_text, job.apply_url,
+                job.location_raw, job.location_normalized, job.description_text, job.apply_url,
                 job.ats_type, job.external_job_id, job.posted_at,
                 job.source_name, job.source_kind, job.source_priority, job.source_type,
-                now, job.matched_keyword, job.score, bd_json,
+                now, job.matched_keyword, job.score, opp_type, bd_json,
                 unique_key,
-            ))
-        else:
-            db_execute(
-                "UPDATE jobs SET last_seen=?, score=?, score_breakdown_json=?, miss_count=0, job_status='active' WHERE unique_key=?",
-                (now, job.score, bd_json, unique_key),
-            )
-        return False, unique_key
+            ),
+        )
+    else:
+        db_execute(
+            """
+            UPDATE jobs SET
+                location_normalized=?, last_seen=?, matched_keyword=?, score=?, opportunity_type=?,
+                score_breakdown_json=?, miss_count=0, job_status='active'
+            WHERE unique_key=?
+            """,
+            (job.location_normalized, now, job.matched_keyword, job.score, opp_type, bd_json, unique_key),
+        )
+
+    if was_expired:
+        record_job_event(unique_key, 'reopened', job.source_name, old_snapshot, new_snapshot)
+    else:
+        changes = detect_material_changes(old_snapshot, new_snapshot)
+        if changes:
+            notes = ', '.join(sorted(changes.keys()))[:240]
+            record_job_event(unique_key, 'updated', job.source_name, old_snapshot, new_snapshot, notes=notes)
+
+    return False, unique_key
 
 
 # ── Core monitoring run ───────────────────────────────────────────────────────
@@ -1501,13 +1668,19 @@ def format_job_alert(job: CanonicalJob) -> str:
 
 def format_job_rows(rows) -> str:
     if not rows:
-        return "No matching jobs saved yet."
-    lines = []
-    for idx, row in enumerate(rows, 1):
+        return "📭 No active matches saved yet. Try /scan for a fresh run."
+    lines = ["🗂️ Saved matches"]
+    for idx, row in enumerate(rows[:10], 1):
         title, company, loc, url, first_seen, score = row
-        loc_part = f" | {prettify_location(loc)}" if loc else ""
-        lines.append(f"{idx}. {title} — {company}{loc_part}\nScore: {int(score)}\n{url}\nFound: {first_seen}\n")
-    return "\n".join(lines[:10])
+        loc_text = prettify_location(loc) if loc else None
+        lines.append(f"\n{idx}. {title}")
+        lines.append(f"   🏢 {company}")
+        if loc_text:
+            lines.append(f"   📍 {loc_text}")
+        lines.append(f"   ⭐ Score {int(score)}")
+        lines.append(f"   🕘 First seen {first_seen}")
+        lines.append(f"   🔗 {url}")
+    return "\n".join(lines)
 
 def latest_rows(hours=24, limit=10):
     cutoff = (utc_now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1589,7 +1762,7 @@ def handle_command(text: str) -> str:
         total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
         # Send header
         send_telegram_message(
-            f"📋 All stored matching roles ({total} total, showing top {min(len(rows), 30)} by score):"
+            f"📚 Stored matches ({total} total · showing top {min(len(rows), 30)} by score)"
         )
         time.sleep(0.3)
         # Send each job as a rich card
@@ -1823,7 +1996,33 @@ def handle_command(text: str) -> str:
                 send_telegram_message(f"❌ Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
 
         threading.Thread(target=_run_scan, daemon=True).start()
-        return "⏳ Scan started — results incoming shortly."
+        return "⏳ Scan started — results are on the way."
+
+    if lower == "/events":
+        rows = db_execute(
+            """
+            SELECT event_type, event_at, source_name, old_value_json, new_value_json, notes
+            FROM job_events
+            ORDER BY id DESC
+            LIMIT 12
+            """,
+            fetch=True,
+        )
+        if not rows:
+            return "🕘 No lifecycle events yet."
+        icon_map = {"created": "🆕", "updated": "🔄", "reopened": "♻️", "expired": "⌛"}
+        lines = ["🕘 Recent activity"]
+        for event_type, event_at, source_name, old_json, new_json, notes in rows:
+            old_val = json.loads(old_json) if old_json else {}
+            new_val = json.loads(new_json) if new_json else {}
+            snap = new_val or old_val
+            title = snap.get("title") or "Unknown title"
+            company = snap.get("company") or "Unknown company"
+            lines.append(f"{icon_map.get(event_type, '•')} {event_type.title()} — {company} — {title}")
+            lines.append(f"  {event_at} | {source_name or snap.get('source_name') or 'source unknown'}")
+            if notes:
+                lines.append(f"  {notes}")
+        return "\n".join(lines[:40])
 
     if lower == "/status":
         total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
@@ -1831,16 +2030,20 @@ def handle_command(text: str) -> str:
         active_sources = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
         paused = (get_state('paused', '0') == '1')
         return (
-            f"{'⏸ Paused' if paused else '▶️ Running'}\n"
-            f"Sources: {active_sources} active | {healthy} healthy\n"
-            f"Active matches: {total}\n"
-            f"Location mode: {get_state('location_mode','london')}\n"
-            f"Quality mode: {get_state('quality_mode','normal')}\n"
-            f"Score threshold: {quality_threshold()}\n"
-            f"Interval: {CHECK_INTERVAL_SECONDS}s\n"
-            f"Last checked: {get_state('last_checked','Never')}\n"
-            f"New last run: {get_state('last_match_count','0')}\n\n"
-            f"Need fresh results? Use /scan. Need diagnostics? Use /scandebug."
+            f"🤖 VFX Job Monitor\n\n"
+            f"{'▶️ Status: running' if not paused else '⏸️ Status: paused'}\n"
+            f"🛰️ Sources: {active_sources} active · {healthy} healthy\n"
+            f"🗂️ Active matches: {total}\n"
+            f"📍 Location mode: {get_state('location_mode','london')}\n"
+            f"🎚️ Quality mode: {get_state('quality_mode','normal')}\n"
+            f"⭐ Score threshold: {quality_threshold()}\n"
+            f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
+            f"🕘 Last checked: {get_state('last_checked','Never')}\n"
+            f"✨ New last run: {get_state('last_match_count','0')}\n\n"
+            f"Next best commands\n"
+            f"• 🚀 /scan for fresh results now\n"
+            f"• 🗂️ /jobs to browse saved matches\n"
+            f"• 🧪 /scandebug for source-by-source diagnostics"
         )
 
     if lower == "/jobs":
@@ -1871,15 +2074,15 @@ def handle_command(text: str) -> str:
         return format_job_rows(rows) if rows else f'No active jobs for "{term}".'
 
     if lower == "/keywords":
-        return "Keywords:\n" + "\n".join(f"- {k}" for k in get_keywords())
+        return "🧩 Keywords\n" + "\n".join(f"• {k}" for k in get_keywords())
 
     if lower.startswith("/addkeyword "):
         kw = text[len("/addkeyword "):].strip()
-        add_keyword(kw); return f'Added: "{normalize_text(kw)}"'
+        add_keyword(kw); return f'➕ Added keyword: "{normalize_text(kw)}"'
 
     if lower.startswith("/removekeyword "):
         kw = text[len("/removekeyword "):].strip()
-        remove_keyword(kw); return f'Removed: "{normalize_text(kw)}"'
+        remove_keyword(kw); return f'➖ Removed keyword: "{normalize_text(kw)}"'
 
     if lower == "/companies":
         rows = db_execute("""
@@ -1896,7 +2099,7 @@ def handle_command(text: str) -> str:
     if lower == "/health":
         rows = db_execute("SELECT status, COUNT(*) FROM source_health GROUP BY status", fetch=True)
         if not rows:
-            return "No health data yet. Run a check first."
+            return "🩺 No health data yet. Run /scan first."
         total = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
         summary = "\n".join(f"  {s}: {n}" for s, n in rows)
         return f"Source health ({total} active):\n{summary}"
@@ -1908,7 +2111,7 @@ def handle_command(text: str) -> str:
             ORDER BY consecutive_fails DESC
         """, fetch=True)
         if not rows:
-            return "No degraded or dead sources. ✅"
+            return "✅ No degraded or dead sources."
         lines = []
         for name, fails, evt, error, last_ok in rows:
             icon = "🔴" if fails >= 7 else ("🟡" if evt == "success_zero" else "⚠️")
@@ -1922,20 +2125,20 @@ def handle_command(text: str) -> str:
     if lower.startswith("/setlocation "):
         mode = lower.replace("/setlocation ", "", 1).strip()
         if mode not in {"london", "uk", "off"}: return "Use: london, uk, or off"
-        set_state("location_mode", mode); return f"Location → {mode}"
+        set_state("location_mode", mode); return f"📍 Location mode set to {mode}"
 
     if lower.startswith("/quality "):
         mode = lower.replace("/quality ", "", 1).strip()
         if mode not in {"strict", "normal", "off"}: return "Use: strict, normal, or off"
-        set_state("quality_mode", mode); return f"Quality → {mode} (threshold: {quality_threshold()})"
+        set_state("quality_mode", mode); return f"🎚️ Quality mode set to {mode} (threshold: {quality_threshold()})"
 
     if lower == "/pause":
-        set_state("paused", "1"); return "⏸ Paused."
+        set_state("paused", "1"); return "⏸️ Monitoring paused."
 
     if lower == "/resume":
-        set_state("paused", "0"); return "▶️ Resumed."
+        set_state("paused", "0"); return "▶️ Monitoring resumed."
 
-    return "Unknown command. Send /help"
+    return "🤔 I don't know that command yet. Use /help to see the clean command list."
 
 
 # ── Background threads ────────────────────────────────────────────────────────
