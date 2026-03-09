@@ -122,7 +122,7 @@ DISCOVERY_BLOCKED_DOMAINS = {
 DEFAULT_SOURCES = [
     {"name": "Framestore Careers",       "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.framestore.com/careers"},
     {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "html",       "url": "https://framestore.recruitee.com/"},
-    {"name": "DNEG Open Positions",      "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.dneg.com/join-us/open-positions"},
+    {"name": "DNEG Open Positions",      "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/dneg"},
     {"name": "DNEG Jobvite",             "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs"},
     {"name": "Cinesite Job Vacancies",   "company": "Cinesite",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://cinesite.com/job-vacancies/"},
     {"name": "Blue Zoo Careers",         "company": "Blue Zoo",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://careers.blue-zoo.co.uk/vacancies/vacancy-search-results.aspx?view=grid"},
@@ -133,13 +133,11 @@ DEFAULT_SOURCES = [
     {"name": "Milk Careers",             "company": "Milk",                        "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.milk-vfx.com/careers/"},
     {"name": "BlueBolt Hiring",          "company": "BlueBolt",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.blue-bolt.com/hiring"},
     {"name": "Outpost Careers",          "company": "Outpost",                     "kind": "studio",         "priority": 1, "type": "html",       "url": "https://careers.outpost-vfx.com/"},
-    {"name": "The Mill Careers",         "company": "The Mill",                    "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.themill.com/careers"},
     {"name": "Coffee & TV Careers",      "company": "Coffee & TV",                 "kind": "studio",         "priority": 2, "type": "html",       "url": "https://coffeeand.tv/about/join-us/"},
     {"name": "Envy Careers",             "company": "Envy",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.envypost.co.uk/careers"},
     {"name": "Lola Post Careers",        "company": "Lola",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.lola-post.com/careers"},
     {"name": "ScreenSkills Jobs",        "company": "ScreenSkills",                "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.screenskills.com/jobs/"},
     {"name": "Realtime Careers",           "company": "Realtime",                    "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.realtimeuk.com/jobs"},
-    {"name": "Electric Theatre Careers", "company": "Electric Theatre Collective", "kind": "studio",         "priority": 2, "type": "html",       "url": "https://electrictheatre.tv/careers"},
     {"name": "Untold Studios Teamtailor","company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.untoldstudios.tv/jobs"},
     {"name": "Untold Studios Careers",   "company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "html",       "url": "https://untoldstudios.tv/careers/"},
 ]
@@ -1001,8 +999,12 @@ def fetch_text(url: str) -> str:
     r.raise_for_status()
     return r.text
 
-def fetch_json(url: str):
-    r = requests.get(url, headers=HEADERS, timeout=10)
+def fetch_json(url: str, method: str = "GET", payload: dict = None):
+    if method == "POST":
+        r = requests.post(url, headers={**HEADERS, "Content-Type": "application/json"},
+                          json=payload, timeout=10)
+    else:
+        r = requests.get(url, headers=HEADERS, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -1270,7 +1272,29 @@ def parse_lever(source: dict):
         pass
     return parse_html(source)
 
-def parse_workable(source):        return parse_html(source)
+def parse_workable(source: dict):
+    """Workable public JSON API: /api/v3/accounts/{slug}/jobs"""
+    try:
+        m = re.search(r"apply\.workable\.com/([^/?#]+)", source["url"])
+        if m:
+            slug = m.group(1).rstrip("/")
+            data = fetch_json(
+                f"https://apply.workable.com/api/v3/accounts/{slug}/jobs",
+                method="POST", payload={"query": "", "location": [], "department": [],
+                                        "worktype": [], "remote": []}
+            )
+            results = data.get("results", [])
+            return [{"title":    clean_text(i.get("title", "")),
+                     "location": clean_text(i.get("location", {}).get("city", "") or
+                                            i.get("location", {}).get("country", "") or ""),
+                     "url":      f"https://apply.workable.com/{slug}/j/{i.get('shortcode','')}/",
+                     "body":     json.dumps(i),
+                     "external_id": i.get("shortcode", ""),
+                     "ats_type": "workable"}
+                    for i in results], []
+    except Exception:
+        pass
+    return parse_html(source)
 def parse_ashby(source):           return parse_html(source)
 def parse_jobvite(source):         return parse_html(source)
 def parse_teamtailor(source):      return parse_html(source)
