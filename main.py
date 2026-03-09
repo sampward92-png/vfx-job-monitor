@@ -892,43 +892,142 @@ def discover_ats_sources_from_html(source: dict, html: str) -> list:
         })
     return discovered
 
-def generic_extract_jobs_from_soup(source: dict, soup) -> list:
-    jobs, seen = [], set()
-    source_path = urlparse(source["url"]).path.rstrip("/")
+def _best_job_container(a):
+    """Return the nearest useful container for a candidate job link."""
+    for parent in a.parents:
+        if not getattr(parent, "name", None):
+            continue
+        if parent.name in {"article", "li", "tr", "section"}:
+            return parent
+        if parent.name == "div":
+            classes = " ".join(parent.get("class", []))
+            ident = f"{classes} {parent.get('id', '')}".lower()
+            if any(tok in ident for tok in ["job", "role", "career", "vacancy", "opening", "position", "posting", "listing", "card"]):
+                return parent
+    return a.parent or a
+
+
+def _extract_title_and_context(a):
+    """Extract a stronger job title and richer context than anchor text alone."""
+    container = _best_job_container(a)
+    anchor_text = clean_text(a.get_text(" ", strip=True))
+
+    candidates = []
+    if anchor_text:
+        candidates.append(anchor_text)
+
+    # Prefer headings or title-like elements inside the same card/container
+    selectors = [
+        "h1", "h2", "h3", "h4",
+        "[class*='title']", "[class*='job']", "[class*='role']", "[class*='position']",
+        "[id*='title']", "[id*='job']", "[id*='role']", "[id*='position']",
+    ]
+    seen_titles = set()
+    for sel in selectors:
+        try:
+            for el in container.select(sel):
+                txt = clean_text(el.get_text(" ", strip=True))
+                ntxt = normalize_text(txt)
+                if not txt or len(txt) < 4 or ntxt in seen_titles:
+                    continue
+                seen_titles.add(ntxt)
+                candidates.append(txt)
+        except Exception:
+            pass
+
+    # Fall back to nearby sibling text if the anchor is generic
+    for sib in list(a.previous_siblings)[-2:] + list(a.next_siblings)[:2]:
+        if getattr(sib, "get_text", None):
+            txt = clean_text(sib.get_text(" ", strip=True))
+        else:
+            txt = clean_text(str(sib))
+        ntxt = normalize_text(txt)
+        if txt and 4 <= len(txt) <= 160 and ntxt not in seen_titles:
+            seen_titles.add(ntxt)
+            candidates.append(txt)
+
     NAV_PATTERNS = {
         "home", "about", "contact", "menu", "login", "sign in", "register",
         "privacy", "terms", "cookie", "back", "next", "previous", "more",
-        "read more", "view all", "see all", "apply now", "apply here",
+        "read more", "view all", "see all", "apply now", "apply here", "learn more",
+        "details", "view details", "find out more", "job details",
     }
+
+    def score_title(txt: str) -> int:
+        low = normalize_text(txt)
+        score = 0
+        if low in NAV_PATTERNS:
+            score -= 100
+        if txt.startswith("/") or txt.startswith("http"):
+            score -= 100
+        if 8 <= len(txt) <= 120:
+            score += 10
+        if any(t in low for t in ["producer", "production", "coordinator", "assistant", "runner", "intern", "trainee", "job", "role", "vacancy"]):
+            score += 30
+        if any(ch.isalpha() for ch in txt):
+            score += 3
+        return score
+
+    title = anchor_text
+    if candidates:
+        title = max(candidates, key=score_title)
+
+    context = clean_text(container.get_text(" ", strip=True)) if container else anchor_text
+    if len(context) > 1200:
+        context = context[:1200]
+    return title, context
+
+
+def generic_extract_jobs_from_soup(source: dict, soup) -> list:
+    jobs, seen = [], set()
+    source_path = urlparse(source["url"]).path.rstrip("/")
+    nav_patterns = {
+        "home", "about", "contact", "menu", "login", "sign in", "register",
+        "privacy", "terms", "cookie", "back", "next", "previous", "more",
+        "read more", "view all", "see all", "apply now", "apply here", "learn more",
+        "details", "view details", "find out more", "job details",
+    }
+    trigger_terms = [
+        "job", "career", "vacancy", "opening", "role", "position",
+        "producer", "production", "runner", "assistant", "coordinator", "intern", "trainee",
+    ]
+
     for a in soup.find_all("a", href=True):
-        href  = a.get("href", "").strip()
-        title = clean_text(a.get_text(" ", strip=True))
-        if not href or not title or len(title) < 8:
+        href = a.get("href", "").strip()
+        if not href:
             continue
-        # Reject titles that look like URL paths — e.g. "/resource/launchpad-internship"
-        if title.startswith("/") or title.startswith("http"):
-            continue
-        if normalize_text(title) in NAV_PATTERNS:
-            continue
-        full_url  = urljoin(source["url"], href)
+
+        full_url = urljoin(source["url"], href)
         link_path = urlparse(full_url).path.rstrip("/")
         if link_path == source_path or not link_path:
             continue
-        context      = clean_text(a.parent.get_text(" ", strip=True)) if a.parent else title
-        context_blob = f"{title} {context} {full_url}"
-        if not any(t in normalize_text(context_blob) for t in [
-            "job", "career", "vacancy", "opening", "role",
-            "producer", "production", "runner", "assistant", "coordinator", "intern"
-        ]):
+
+        title, context = _extract_title_and_context(a)
+        low_title = normalize_text(title)
+
+        if not title or len(title) < 4:
             continue
+        if low_title in nav_patterns:
+            continue
+        if title.startswith("/") or title.startswith("http"):
+            continue
+
+        context_blob = f"{title} {context} {full_url}"
+        low_blob = normalize_text(context_blob)
+        if not any(t in low_blob for t in trigger_terms):
+            continue
+
         key = short_hash(full_url, title)
         if key in seen:
             continue
         seen.add(key)
+
         jobs.append({
-            "title": title, "company": source["company"],
+            "title": title,
+            "company": source["company"],
             "location": detect_location(context_blob, company=source["company"]),
-            "url": full_url, "body": context,
+            "url": full_url,
+            "body": context,
         })
     return jobs
 
