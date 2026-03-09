@@ -835,9 +835,9 @@ def location_allowed(job: CanonicalJob) -> bool:
     return False
 
 def title_keyword_match(job: CanonicalJob):
-    # Excludes: title only — avoids body text false positives
-    # (e.g. "working alongside editors" should not exclude a PA role)
-    title_hay = normalize_text(job.title)
+    # Excludes: title + URL — catches cases where title is generic ("View job")
+    # but the URL reveals it's an excluded programme (e.g. animation-launchpad-internship)
+    title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
     if any(ex in title_hay for ex in get_excludes()):
         return False, None
     # Keywords: title + body so we catch roles described in the listing
@@ -846,8 +846,8 @@ def title_keyword_match(job: CanonicalJob):
     return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
-    # Excludes on title only
-    title_hay = normalize_text(job.title)
+    # Excludes on title + URL
+    title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
     if any(ex in title_hay for ex in get_excludes()):
         return "excluded"
     full_hay = normalize_text(f"{job.title} {job.description_text or ''}")
