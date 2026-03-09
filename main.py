@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask
+from flask import Flask, render_template_string, request, redirect, url_for
 
 PORT = int(os.environ.get("PORT", "8080"))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -1942,62 +1942,46 @@ def handle_command(text: str) -> str:
                ORDER BY sh.jobs_found_total DESC""",
             fetch=True,
         ) or []
-        active = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
+        active       = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
         total_active = active[0][0]
 
-        companies = {}
-        for source_name, last, total, last_ok, status, evt, company in rows:
-            label = company or source_name
-            item = companies.setdefault(label, {
-                "sources": 0,
-                "jobs_found_last": 0,
-                "jobs_found_total": 0,
-                "broken": 0,
-                "needs_attention": 0,
-            })
-            item["sources"] += 1
-            item["jobs_found_last"] += int(last or 0)
-            item["jobs_found_total"] += int(total or 0)
-
-            if status == "dead":
-                item["broken"] += 1
-            elif status == "degraded":
-                item["needs_attention"] += 1
+        def friendly_status(status, last_event, fails_implied=False):
+            if status == "healthy" and last_event == "success_nonzero": return "Working normally"
+            if status == "healthy" and last_event == "success_zero":    return "No jobs found recently"
+            if status == "suspect":                                      return "No jobs found recently"
+            if status == "degraded":                                     return "Needs attention"
+            if status == "dead":                                         return "Not responding"
+            if status == "unknown":                                      return "Not checked yet"
+            return "No jobs found recently"
 
         producing, quiet, broken = [], [], []
-        for label, item in companies.items():
-            source_note = (
-                f" across {item['sources']} source{'s' if item['sources'] != 1 else ''}"
-                if item["sources"] > 1 else ""
-            )
-            if item["jobs_found_last"] > 0:
-                producing.append((label, item["jobs_found_last"], item["jobs_found_total"], source_note))
-            elif item["broken"] > 0 or item["needs_attention"] > 0:
-                status_text = "Not responding" if item["broken"] > 0 and item["needs_attention"] == 0 else "Needs attention"
-                broken.append((label, status_text, source_note))
+        for r in rows:
+            name, last, total, last_ok, status, evt, company = r
+            label = company or name
+            fs    = friendly_status(status, evt)
+            if status in ("dead", "degraded"):
+                broken.append((label, fs))
+            elif (last or 0) > 0:
+                producing.append((label, last or 0, total or 0, last_ok))
             else:
-                quiet.append((label, "No jobs found recently", source_note))
+                quiet.append((label, fs))
 
-        producing.sort(key=lambda x: (-x[1], -x[2], x[0]))
-        quiet.sort(key=lambda x: x[0])
-        broken.sort(key=lambda x: x[0])
-
-        PLACEHOLDER
+        lines = [f"📡 Coverage report\n{total_active} studios monitored\n"]
 
         if producing:
             lines.append("Producing results:")
-            for company, last, total, source_note in producing[:12]:
-                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total){source_note}")
+            for company, last, total, last_ok in producing[:12]:
+                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total)")
 
         if quiet:
-            X
-            for company, fs, source_note in quiet[:10]:
-                lines.append(f"  🟡 {company} -- {fs}{source_note}")
+            lines.append("\nNo listings found (may be JS-rendered or currently quiet):")
+            for company, fs in quiet[:10]:
+                lines.append(f"  🟡 {company} -- {fs}")
 
         if broken:
-            lines.append("\nNeeds attention:")
-            for company, fs, source_note in broken:
-                lines.append(f"  ❌ {company} -- {fs}{source_note}")
+            lines.append("\nNot responding (URL may have changed):")
+            for company, fs in broken:
+                lines.append(f"  ❌ {company} -- {fs}")
 
         return "\n".join(lines)
 
@@ -2353,18 +2337,314 @@ def monitor_loop():
             set_state("last_checked", now_str())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
+# ── Web app helpers ─────────────────────────────────────────────────────────────
+
+def _fetch_jobs_for_web(where_sql: str = "", params=()):
+    rows = db_execute(
+        f"""SELECT id, unique_key, title, company, location_raw, location_normalized,
+                  apply_url, first_seen, score, opportunity_type, source_name, source_type
+           FROM jobs
+           WHERE job_status='active' {where_sql}
+           ORDER BY score DESC, id DESC""",
+        params, fetch=True,
+    ) or []
+    jobs = []
+    for r in rows:
+        jobs.append({
+            'id': r[0], 'unique_key': r[1], 'title': r[2], 'company': r[3],
+            'location_raw': r[4], 'location_normalized': r[5], 'apply_url': r[6],
+            'first_seen': r[7], 'score': int(r[8] or 0), 'opportunity_type': r[9] or 'direct_role',
+            'source_name': r[10], 'source_type': r[11],
+        })
+    return jobs
+
+def _fetch_job_for_web(job_id: int):
+    rows = db_execute(
+        """SELECT id, unique_key, title, company, location_raw, location_normalized, description_text,
+                  apply_url, first_seen, score, opportunity_type, source_name, source_type, score_breakdown_json
+           FROM jobs WHERE id=? LIMIT 1""",
+        (job_id,), fetch=True,
+    ) or []
+    if not rows:
+        return None
+    r = rows[0]
+    try:
+        breakdown = json.loads(r[13] or '{}')
+    except Exception:
+        breakdown = {}
+    return {
+        'id': r[0], 'unique_key': r[1], 'title': r[2], 'company': r[3], 'location_raw': r[4],
+        'location_normalized': r[5], 'description_text': r[6], 'apply_url': r[7],
+        'first_seen': r[8], 'score': int(r[9] or 0), 'opportunity_type': r[10] or 'direct_role',
+        'source_name': r[11], 'source_type': r[12], 'score_breakdown': breakdown,
+    }
+
+def _fetch_interaction_jobs(action: str):
+    rows = db_execute(
+        """SELECT j.id, j.unique_key, j.title, j.company, j.location_raw, j.location_normalized,
+                  j.apply_url, j.first_seen, j.score, j.opportunity_type, ji.actioned_at
+           FROM job_interactions ji
+           JOIN jobs j ON j.unique_key = ji.unique_key
+           WHERE ji.action=? AND j.job_status='active'
+           ORDER BY ji.actioned_at DESC""",
+        (action,), fetch=True,
+    ) or []
+    jobs = []
+    for r in rows:
+        jobs.append({
+            'id': r[0], 'unique_key': r[1], 'title': r[2], 'company': r[3],
+            'location_raw': r[4], 'location_normalized': r[5], 'apply_url': r[6],
+            'first_seen': r[7], 'score': int(r[8] or 0), 'opportunity_type': r[9] or 'direct_role',
+            'actioned_at': r[10],
+        })
+    return jobs
+
+def _interaction_map(action: str):
+    rows = db_execute('SELECT unique_key FROM job_interactions WHERE action=?', (action,), fetch=True) or []
+    return {r[0] for r in rows}
+
+def _job_kind_badge(job: dict) -> str:
+    return 'Programme / internship' if job.get('opportunity_type') == 'programme' else 'Direct role'
+
+def _job_kind_icon(job: dict) -> str:
+    return '🎓' if job.get('opportunity_type') == 'programme' else '🎯'
+
+def _render_page(title: str, body: str):
+    tpl = """
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>{{ title }}</title>
+      <style>
+        :root{--muted:#94a3b8;--text:#e5e7eb;--border:#223049;}
+        *{box-sizing:border-box}
+        body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1220;color:var(--text)}
+        a{color:inherit;text-decoration:none}
+        .wrap{max-width:980px;margin:0 auto;padding:20px}
+        .nav{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 24px}
+        .nav a,.btn{background:#111827;border:1px solid var(--border);color:#e5e7eb;padding:10px 14px;border-radius:999px;font-size:14px;display:inline-block}
+        .btn.primary{background:#0ea5e9;color:#00131d;border-color:#0ea5e9;font-weight:600}
+        .hero{background:linear-gradient(180deg,#0f172a,#0b1220);border:1px solid var(--border);border-radius:20px;padding:22px;margin-bottom:18px}
+        .hero h1{margin:0 0 8px;font-size:28px}.hero p{margin:0;color:var(--muted);line-height:1.5}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:18px 0 24px}
+        .stat{background:#111827;border:1px solid var(--border);border-radius:16px;padding:16px}.stat .k{font-size:13px;color:var(--muted)} .stat .v{font-size:28px;font-weight:700;margin-top:6px}
+        .section{margin:24px 0}.section h2{font-size:18px;margin:0 0 12px}
+        .card{background:#111827;border:1px solid var(--border);border-radius:18px;padding:16px;margin:12px 0}.meta{color:var(--muted);font-size:14px;line-height:1.5}
+        .title{font-size:18px;font-weight:700;margin:0 0 6px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+        .empty{background:#111827;border:1px dashed #314158;border-radius:18px;padding:20px;color:var(--muted)}
+        .small{font-size:13px;color:var(--muted)} ul.clean{list-style:none;padding:0;margin:0} ul.clean li{padding:6px 0;border-bottom:1px solid #182334} ul.clean li:last-child{border-bottom:none}
+        input,select{padding:12px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="hero">
+          <h1>🎬 VFX Job Monitor</h1>
+          <p>Telegram stays as your notification channel. This web app is the clean place to browse, save and track the roles your monitor finds.</p>
+          <div class="nav">
+            <a href="/">Home</a>
+            <a href="/jobs">Jobs</a>
+            <a href="/saved">Saved</a>
+            <a href="/applied">Applied</a>
+            <a href="/coverage">Coverage</a>
+            <a href="/health">Health</a>
+          </div>
+        </div>
+        {{ body|safe }}
+      </div>
+    </body>
+    </html>
+    """
+    return render_template_string(tpl, title=title, body=body)
+
+def _render_job_cards(jobs, empty_text: str, show_actioned=False):
+    saved_keys = _interaction_map('saved')
+    applied_keys = _interaction_map('applied')
+    html = []
+    if not jobs:
+        return f'<div class="empty">{empty_text}</div>'
+    current_path = request.path if request else '/jobs'
+    for job in jobs:
+        loc = prettify_location(job.get('location_raw') or job.get('location_normalized'))
+        extra = ''
+        if show_actioned and job.get('actioned_at'):
+            extra = f'<div class="small">Updated: {job["actioned_at"]}</div>'
+        save_label = 'Saved' if job['unique_key'] in saved_keys else 'Save'
+        applied_label = 'Applied' if job['unique_key'] in applied_keys else 'Mark applied'
+        html.append(
+            f'<div class="card">'
+            f'<div class="title">{_job_kind_icon(job)} <a href="/job/{job["id"]}">{job["title"]}</a></div>'
+            f'<div class="meta">🏢 {job["company"]}<br>📍 {loc}<br>⭐ Score {job["score"]}<br>🏷️ {_job_kind_badge(job)}</div>'
+            f'{extra}'
+            f'<div class="actions">'
+            f'<a class="btn primary" href="{job["apply_url"]}" target="_blank" rel="noopener">Open official job</a>'
+            f'<a class="btn" href="/job/{job["id"]}">View details</a>'
+            f'<a class="btn" href="/action/save/{job["id"]}?next={current_path}">{save_label}</a>'
+            f'<a class="btn" href="/action/applied/{job["id"]}?next={current_path}">{applied_label}</a>'
+            f'</div></div>'
+        )
+    return ''.join(html)
+
 # ── Flask ──────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def home():
-    total   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    active_jobs = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
     sources = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
     healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
-    return (
-        f"VFX Job Monitor -- Phase 2a\n"
-        f"Active jobs: {total} | Sources: {sources} | Healthy: {healthy}\n"
-        f"Last checked: {get_state('last_checked', 'Never')}"
-    ), 200
+    latest_direct = _fetch_jobs_for_web("AND opportunity_type!='programme' LIMIT 5")
+    latest_programmes = _fetch_jobs_for_web("AND opportunity_type='programme' LIMIT 5")
+    body = [
+        '<div class="grid">',
+        f'<div class="stat"><div class="k">Active jobs</div><div class="v">{active_jobs}</div></div>',
+        f'<div class="stat"><div class="k">Monitored sources</div><div class="v">{sources}</div></div>',
+        f'<div class="stat"><div class="k">Healthy sources</div><div class="v">{healthy}</div></div>',
+        f'<div class="stat"><div class="k">Last checked</div><div class="v" style="font-size:16px">{get_state("last_checked", "Never")}</div></div>',
+        '</div>',
+        '<div class="section"><h2>Direct roles</h2>',
+        _render_job_cards(latest_direct, 'No direct roles saved yet. Run /scan in Telegram and check back here.'),
+        '</div>',
+        '<div class="section"><h2>Programme signals</h2>',
+        _render_job_cards(latest_programmes, 'No programme or internship signals saved yet.'),
+        '</div>',
+    ]
+    return _render_page('VFX Job Monitor', ''.join(body))
+
+@app.route('/jobs')
+def web_jobs():
+    q = clean_text(request.args.get('q', ''))
+    kind = clean_text(request.args.get('kind', 'all')).lower()
+    where = ''
+    params = []
+    if q:
+        where += ' AND (lower(title) LIKE ? OR lower(company) LIKE ?)'
+        params += [f'%{q.lower()}%', f'%{q.lower()}%']
+    if kind == 'direct':
+        where += " AND opportunity_type!='programme'"
+    elif kind == 'programme':
+        where += " AND opportunity_type='programme'"
+    jobs = _fetch_jobs_for_web(where, tuple(params))
+    controls = f'''
+    <div class="card">
+      <form method="get" action="/jobs" style="display:flex;gap:10px;flex-wrap:wrap">
+        <input name="q" value="{q}" placeholder="Search title or company" style="flex:1;min-width:220px;">
+        <select name="kind">
+          <option value="all" {'selected' if kind=='all' else ''}>All opportunities</option>
+          <option value="direct" {'selected' if kind=='direct' else ''}>Direct roles</option>
+          <option value="programme" {'selected' if kind=='programme' else ''}>Programmes</option>
+        </select>
+        <button class="btn primary" type="submit">Filter</button>
+      </form>
+    </div>
+    '''
+    body = controls + '<div class="section"><h2>Jobs</h2>' + _render_job_cards(jobs, 'No jobs match this view right now.') + '</div>'
+    return _render_page('Jobs', body)
+
+@app.route('/saved')
+def web_saved():
+    jobs = _fetch_interaction_jobs('saved')
+    body = '<div class="section"><h2>Saved jobs</h2>' + _render_job_cards(jobs, 'Nothing saved yet. Use Save on a job card or from Telegram alerts.', show_actioned=True) + '</div>'
+    return _render_page('Saved jobs', body)
+
+@app.route('/applied')
+def web_applied():
+    jobs = _fetch_interaction_jobs('applied')
+    body = '<div class="section"><h2>Applied jobs</h2>' + _render_job_cards(jobs, 'No applications tracked yet. Mark roles as applied to build your list.', show_actioned=True) + '</div>'
+    return _render_page('Applied jobs', body)
+
+@app.route('/job/<int:job_id>')
+def web_job_detail(job_id: int):
+    job = _fetch_job_for_web(job_id)
+    if not job:
+        return _render_page('Job not found', '<div class="empty">That job could not be found.</div>'), 404
+    loc = prettify_location(job.get('location_raw') or job.get('location_normalized'))
+    reasons = []
+    for pts, label in [
+        (job['score_breakdown'].get('title_strength', 0), 'strong title match'),
+        (job['score_breakdown'].get('juniority', 0), 'junior / entry-level signal'),
+        (job['score_breakdown'].get('location_confidence', 0), 'location match'),
+        (job['score_breakdown'].get('source_quality', 0), 'strong source'),
+        (job['score_breakdown'].get('company_tier', 0), 'preferred studio'),
+    ]:
+        if pts > 0:
+            reasons.append(f'<li>{label} (+{pts})</li>')
+    body = (
+        f'<div class="card">'
+        f'<div class="title">{_job_kind_icon(job)} {job["title"]}</div>'
+        f'<div class="meta">🏢 {job["company"]}<br>📍 {loc}<br>⭐ Score {job["score"]}<br>🏷️ {_job_kind_badge(job)}<br>📡 {job["source_name"]}</div>'
+        f'<div class="actions">'
+        f'<a class="btn primary" href="{job["apply_url"]}" target="_blank" rel="noopener">Open official job</a>'
+        f'<a class="btn" href="/action/save/{job["id"]}?next=/job/{job["id"]}">Save</a>'
+        f'<a class="btn" href="/action/applied/{job["id"]}?next=/job/{job["id"]}">Mark applied</a>'
+        f'</div></div>'
+        f'<div class="section"><h2>Why it matched</h2><div class="card"><ul class="clean">{("".join(reasons) if reasons else "<li>No score breakdown available.</li>")}</ul></div></div>'
+        f'<div class="section"><h2>Role explanation</h2><div class="card" style="white-space:pre-wrap">{explain_role(job["title"])}</div></div>'
+        f'<div class="section"><h2>Description</h2><div class="card" style="white-space:pre-wrap">{job.get("description_text") or "No description saved for this role yet."}</div></div>'
+    )
+    return _render_page(job['title'], body)
+
+@app.route('/action/<action>/<int:job_id>')
+def web_action(action: str, job_id: int):
+    if action not in {'saved', 'save', 'applied'}:
+        return redirect(request.args.get('next', '/jobs'))
+    job = _fetch_job_for_web(job_id)
+    if job:
+        final_action = 'saved' if action in {'saved', 'save'} else 'applied'
+        mark_job_interaction(job['unique_key'], final_action)
+    nxt = request.args.get('next') or '/jobs'
+    return redirect(nxt)
+
+@app.route('/coverage')
+def web_coverage():
+    rows = db_execute(
+        """SELECT s.company, s.name, COALESCE(h.jobs_found_last,0), COALESCE(h.jobs_found_total,0), COALESCE(h.status,'unknown')
+           FROM sources s LEFT JOIN source_health h ON s.name = h.source_name
+           WHERE s.active=1 ORDER BY s.priority ASC, s.company ASC""",
+        fetch=True,
+    ) or []
+    by_company = {}
+    for company, source_name, found_last, found_total, status in rows:
+        entry = by_company.setdefault(company, {'found_last':0, 'found_total':0, 'statuses':set(), 'sources':[]})
+        entry['found_last'] += int(found_last or 0)
+        entry['found_total'] += int(found_total or 0)
+        entry['statuses'].add(status or 'unknown')
+        entry['sources'].append(source_name)
+    producing = []
+    quiet = []
+    for company, info in by_company.items():
+        if info['found_last'] > 0:
+            producing.append((company, info['found_last'], info['found_total']))
+        else:
+            quiet.append((company, info['statuses']))
+    producing.sort(key=lambda x: (-x[1], x[0]))
+    quiet.sort(key=lambda x: x[0])
+    parts = [
+        '<div class="grid">',
+        f'<div class="stat"><div class="k">Active sources</div><div class="v">{len(rows)}</div></div>',
+        f'<div class="stat"><div class="k">Studios represented</div><div class="v">{len(by_company)}</div></div>',
+        f'<div class="stat"><div class="k">Producing results</div><div class="v">{len(producing)}</div></div>',
+        f'<div class="stat"><div class="k">Quiet / needs attention</div><div class="v">{len(quiet)}</div></div>',
+        '</div>',
+        '<div class="section"><h2>Producing results</h2><div class="card"><ul class="clean">'
+    ]
+    if producing:
+        for company, found_last, found_total in producing:
+            parts.append(f'<li>✅ {company} — {found_last} found last scan ({found_total} total)</li>')
+    else:
+        parts.append('<li>No sources are producing results right now.</li>')
+    parts.append('</ul></div></div>')
+    parts.append('<div class="section"><h2>Quiet or needs attention</h2><div class="card"><ul class="clean">')
+    if quiet:
+        for company, statuses in quiet:
+            label = 'No jobs found recently' if any(s in statuses for s in {'healthy','suspect','unknown'}) else 'Needs attention'
+            parts.append(f'<li>🟡 {company} — {label}</li>')
+    else:
+        parts.append('<li>Everything is currently producing results.</li>')
+    parts.append('</ul></div></div>')
+    return _render_page('Coverage', ''.join(parts))
+
 
 @app.route("/health")
 def health_check():
