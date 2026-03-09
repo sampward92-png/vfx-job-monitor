@@ -543,6 +543,22 @@ def init_db():
 
     # Phase 1b: extended source_health with event_type column
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS discovered_sources (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            company             TEXT NOT NULL,
+            source_name         TEXT NOT NULL,
+            discovered_from     TEXT,
+            ats_type            TEXT NOT NULL,
+            candidate_url       TEXT NOT NULL,
+            status              TEXT DEFAULT 'pending',
+            notes               TEXT,
+            created_at          TEXT NOT NULL,
+            reviewed_at         TEXT,
+            UNIQUE(candidate_url)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS source_health (
             source_name          TEXT PRIMARY KEY,
             last_run_at          TEXT,
@@ -593,6 +609,8 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_job_events_key     ON job_events(unique_key)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_job_events_at      ON job_events(event_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_discovered_status ON discovered_sources(status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_discovered_company ON discovered_sources(company)")
 
     conn.commit()
     conn.close()
@@ -611,7 +629,7 @@ def seed_defaults():
 
     if not get_state("location_mode"): set_state("location_mode", "london")
     if not get_state("paused"):        set_state("paused", "0")
-    if not get_state("quality_mode"):  set_state("quality_mode", "off")
+    if not get_state("quality_mode"):  set_state("quality_mode", "normal")
 
     existing_sources = {
         (row[0], row[1]) for row in db_execute("SELECT name, url FROM sources", fetch=True) or []
@@ -638,6 +656,141 @@ def get_active_sources():
         {"name": r[0], "company": r[1], "kind": r[2], "priority": r[3], "type": r[4], "url": r[5]}
         for r in (rows or [])
     ]
+
+
+def save_discovered_sources(parent_source: dict, discovered_sources: list) -> int:
+    """Persist newly discovered ATS sources for later review."""
+    if not discovered_sources:
+        return 0
+
+    new_count = 0
+    for ds in discovered_sources:
+        candidate_url = canonicalize_url(ds.get("url", ""))
+        if not candidate_url:
+            continue
+
+        already_live = db_execute(
+            "SELECT 1 FROM sources WHERE url=? LIMIT 1",
+            (candidate_url,),
+            fetch=True,
+        )
+        if already_live:
+            continue
+
+        already_discovered = db_execute(
+            "SELECT 1 FROM discovered_sources WHERE candidate_url=? LIMIT 1",
+            (candidate_url,),
+            fetch=True,
+        )
+        if already_discovered:
+            continue
+
+        db_execute(
+            """
+            INSERT INTO discovered_sources
+                (company, source_name, discovered_from, ats_type, candidate_url, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                ds.get("company", parent_source.get("company", "Unknown")),
+                ds.get("name", f"{parent_source.get('company', 'Unknown')} {ds.get('type', 'ats')}") ,
+                parent_source.get("name", ""),
+                ds.get("type", "html"),
+                candidate_url,
+                now_str(),
+            ),
+        )
+        new_count += 1
+    return new_count
+
+
+def pending_discoveries(limit: int = 20):
+    return db_execute(
+        """
+        SELECT id, company, source_name, ats_type, candidate_url, discovered_from, created_at
+        FROM discovered_sources
+        WHERE status='pending'
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+        fetch=True,
+    ) or []
+
+
+def approve_discovery(discovery_id: int) -> tuple[bool, str]:
+    row = db_execute(
+        """
+        SELECT id, company, source_name, ats_type, candidate_url, status
+        FROM discovered_sources
+        WHERE id=?
+        """,
+        (discovery_id,),
+        fetch=True,
+    )
+    if not row:
+        return False, "Discovery not found."
+
+    _, company, source_name, ats_type, candidate_url, status = row[0]
+    if status == 'approved':
+        return False, "Discovery is already approved."
+    if status == 'rejected':
+        return False, "Discovery has already been rejected."
+
+    existing = db_execute("SELECT 1 FROM sources WHERE url=? LIMIT 1", (candidate_url,), fetch=True)
+    if not existing:
+        db_execute(
+            """
+            INSERT INTO sources (name, company, kind, priority, type, url, active, added_at)
+            VALUES (?, ?, 'studio', 2, ?, ?, 1, ?)
+            """,
+            (source_name, company, ats_type, candidate_url, now_str()),
+        )
+
+    db_execute(
+        "UPDATE discovered_sources SET status='approved', reviewed_at=? WHERE id=?",
+        (now_str(), discovery_id),
+    )
+    return True, f"Approved and added source: {source_name}"
+
+
+def reject_discovery(discovery_id: int) -> tuple[bool, str]:
+    row = db_execute(
+        "SELECT id, status FROM discovered_sources WHERE id=?",
+        (discovery_id,),
+        fetch=True,
+    )
+    if not row:
+        return False, "Discovery not found."
+    if row[0][1] == 'rejected':
+        return False, "Discovery is already rejected."
+    if row[0][1] == 'approved':
+        return False, "Discovery is already approved."
+
+    db_execute(
+        "UPDATE discovered_sources SET status='rejected', reviewed_at=? WHERE id=?",
+        (now_str(), discovery_id),
+    )
+    return True, f"Rejected discovery #{discovery_id}."
+
+
+def format_discoveries(limit: int = 12) -> str:
+    rows = pending_discoveries(limit)
+    if not rows:
+        return "🧭 No pending ATS discoveries."
+
+    lines = ["🧭 Pending ATS discoveries"]
+    for d_id, company, source_name, ats_type, candidate_url, discovered_from, created_at in rows:
+        lines.append("")
+        lines.append(f"{d_id}. {company} — {ats_type}")
+        lines.append(f"   Source: {source_name}")
+        if discovered_from:
+            lines.append(f"   Found on: {discovered_from}")
+        lines.append(f"   URL: {candidate_url}")
+        lines.append(f"   Added: {created_at}")
+    lines.append("")
+    lines.append("Use /approve_source <id> or /reject_source <id>.")
+    return "\n".join(lines)
 
 
 # ── Source health ─────────────────────────────────────────────────────────────
@@ -1023,44 +1176,76 @@ def prettify_location(loc: Optional[str]) -> str:
 def format_help_text() -> str:
     return """🎬 VFX Job Monitor
 
-Welcome
-This bot watches VFX, animation and post-production hiring sources and highlights likely entry-level production opportunities.
+What this bot does
+This bot checks VFX, animation and post-production hiring sources and highlights entry-level production opportunities.
 
-Start here
-• 🚀 /scan — run a fresh scan now and send the best results from this run
-• 🧭 /status — see whether the bot is running, how many sources are active, and your current settings
-• 🗂️ /jobs — browse the best active matches already saved by the bot
-• 🧪 /scandebug — run a scan with per-source diagnostics when testing coverage
+──────────
+Core commands
+──────────
+🚀 /scan
+Run a new scan and send the best jobs found right now
 
+🗂️ /jobs
+Show the best active jobs already saved by the bot
+
+✨ /latest
+Show jobs discovered by the bot in the last 24 hours
+
+🔎 /search <term>
+Search saved jobs by title or company name
+
+🧭 /status
+Show whether the bot is running and display current settings
+
+❓ /help
+Show this guide
+
+──────────
+Settings
+──────────
+📍 /setlocation london|uk|off
+Choose which locations the bot should allow
+
+🎚️ /quality strict|normal|off
+Choose how selective the bot should be
+
+🧩 /keywords
+Show the keyword list used to detect relevant roles
+
+➕ /addkeyword <phrase>
+Add a new keyword or phrase
+
+➖ /removekeyword <phrase>
+Remove a keyword or phrase
+
+──────────
+Control
+──────────
+⏸️ /pause
+Pause scheduled monitoring
+
+▶️ /resume
+Resume scheduled monitoring
+
+──────────
 How to use it
-1. Run /scan when you want fresh results right now
-2. Use /jobs or /latest to browse what the bot has already saved
-3. Use /quality normal for everyday use
-4. Use /quality off + /scandebug only when tuning coverage
+──────────
+1. Run /scan when you want fresh results now
+2. Use /jobs or /latest to browse jobs the bot has already saved
+3. Keep /quality normal for day-to-day use
+4. Use /quality off with /scandebug only when testing coverage
 
-Main commands
-• ✨ /latest — matches first seen in the last 24 hours
-• 🔥 /highpriority — strongest saved matches
-• 🔎 /search <term> — search saved jobs by title or company
-• 📚 /showall — show the top stored matches in the database
-• 🕘 /events — recent lifecycle changes such as created, updated, reopened, or expired
-
-Tuning
-• 📍 /setlocation london|uk|off — control location filtering
-• 🎚️ /quality strict|normal|off — control how selective the scoring is
-• 🧩 /keywords — show your current keyword list
-• ➕ /addkeyword <phrase> — add a phrase to match
-• ➖ /removekeyword <phrase> — remove a phrase
-
-Operations
-• 🛰️ /sources — monitored sources
-• 🩺 /health — source health summary
-• 🚨 /dead — degraded, suspect, or dead sources
-• ⏸️ /pause and ▶️ /resume — stop or restart monitoring
-
+──────────
 Alert labels
-• 🎯 Direct role — likely a real vacancy
-• 🎓 Programme / internship — useful junior-entry signal, but not always a direct job"""
+──────────
+🎯 Direct role
+Likely a real job vacancy
+
+🎓 Programme / internship
+Likely an internship, trainee scheme or work experience opportunity
+
+Tip
+If you are new to the bot, start with 🚀 /scan"""
 
 
 
@@ -1526,6 +1711,7 @@ def collect_and_store_jobs(force: bool = False) -> list:
     def _scrape_one(source):
         try:
             raw_jobs, discovered = fetch_source_jobs(source)
+            save_discovered_sources(source, discovered)
             event_type = "success_nonzero" if raw_jobs else "success_zero"
             record_source_success(source["name"], len(raw_jobs))
             return source, raw_jobs, None
@@ -1668,8 +1854,8 @@ def format_job_alert(job: CanonicalJob) -> str:
 
 def format_job_rows(rows) -> str:
     if not rows:
-        return "📭 No active matches saved yet. Try /scan for a fresh run."
-    lines = ["🗂️ Saved matches"]
+        return "📭 No active matches yet. Run /scan to check live sources now."
+    lines = ["🗂️ Active jobs"]
     for idx, row in enumerate(rows[:10], 1):
         title, company, loc, url, first_seen, score = row
         loc_text = prettify_location(loc) if loc else None
@@ -1744,6 +1930,23 @@ def handle_command(text: str) -> str:
 
     if lower in {"/help", "/howto", "/start"}:
         return format_help_text()
+
+    if lower == "/discoveries":
+        return format_discoveries()
+
+    if lower.startswith("/approve_source "):
+        raw_id = clean_text(text[len("/approve_source "):])
+        if not raw_id.isdigit():
+            return "Use: /approve_source <id>"
+        ok, message = approve_discovery(int(raw_id))
+        return ("✅ " + message) if ok else ("⚠️ " + message)
+
+    if lower.startswith("/reject_source "):
+        raw_id = clean_text(text[len("/reject_source "):])
+        if not raw_id.isdigit():
+            return "Use: /reject_source <id>"
+        ok, message = reject_discovery(int(raw_id))
+        return ("✅ " + message) if ok else ("⚠️ " + message)
 
     if lower == "/showall":
         rows = db_execute("""
@@ -1859,6 +2062,8 @@ def handle_command(text: str) -> str:
                         if err:
                             source_log.append((source["name"], 0, 0, err, {}))
                             continue
+
+                        save_discovered_sources(source, discovered)
 
                         matched_this_source = 0
                         reason_counts = {
@@ -2009,7 +2214,7 @@ def handle_command(text: str) -> str:
             fetch=True,
         )
         if not rows:
-            return "🕘 No lifecycle events yet."
+            return "🕘 No job changes recorded yet."
         icon_map = {"created": "🆕", "updated": "🔄", "reopened": "♻️", "expired": "⌛"}
         lines = ["🕘 Recent activity"]
         for event_type, event_at, source_name, old_json, new_json, notes in rows:
@@ -2039,7 +2244,7 @@ def handle_command(text: str) -> str:
             f"⭐ Score threshold: {quality_threshold()}\n"
             f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
             f"🕘 Last checked: {get_state('last_checked','Never')}\n"
-            f"✨ New last run: {get_state('last_match_count','0')}\n\n"
+            f"✨ Matches found last run: {get_state('last_match_count','0')}\n\n"
             f"Next best commands\n"
             f"• 🚀 /scan for fresh results now\n"
             f"• 🗂️ /jobs to browse saved matches\n"
