@@ -944,12 +944,12 @@ def title_keyword_match(job: CanonicalJob):
     return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
-    # Excludes on title + URL
-    title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
-    if any(ex in title_hay for ex in get_excludes()):
-        return "excluded"
-    full_hay = normalize_text(f"{job.title} {job.description_text or ''}")
-    if not next((kw for kw in get_keywords() if kw in full_hay), None):
+    # Uses same logic as title_keyword_match so counts stay consistent
+    ok, _ = title_keyword_match(job)
+    if not ok:
+        title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
+        if any(ex in title_hay for ex in get_excludes()):
+            return "excluded"
         return "no_keyword"
     if not location_allowed(job):
         return "location"
@@ -1836,10 +1836,9 @@ def handle_command(text: str) -> str:
                             if reason != "passed":
                                 reason_counts[reason] += 1
                                 continue
-                            ok, matched_keyword = title_keyword_match(job)
-                            if not ok:
-                                reason_counts["no_keyword"] += 1
-                                continue
+                            # classify_rejection already validated keyword match;
+                            # call again to get the matched keyword string
+                            _, matched_keyword = title_keyword_match(job)
                             job.matched_keyword = matched_keyword
                             total_score, breakdown = score_job(job)
                             job.score = total_score; job.score_breakdown = breakdown
@@ -1848,8 +1847,12 @@ def handle_command(text: str) -> str:
                             with lock:
                                 created, unique_key = upsert_job(job)
                                 seen_keys.add(unique_key)
+                                # Only notify if job is new OR this is a forced re-scan
+                                # and the job hasn't been notified this session already
                                 if unique_key not in emitted_keys:
-                                    emitted_keys.add(unique_key); all_matched.append(job)
+                                    emitted_keys.add(unique_key)
+                                    if created or debug:
+                                        all_matched.append(job)
                             matched_this += 1
                         source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
 
