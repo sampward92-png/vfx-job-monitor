@@ -148,6 +148,7 @@ UK_STUDIO_COMPANIES = {
     "Framestore", "Nexus Studios", "DNEG", "Cinesite", "Blue Zoo",
     "Jellyfish Pictures", "ILM", "Milk", "BlueBolt", "Outpost",
     "MPC", "The Mill", "Absolute", "Coffee & TV", "Envy", "Lola", "ScreenSkills",
+    "Untold Studios", "Electric Theatre Collective",
 }
 
 LONDON_TERMS = [
@@ -193,6 +194,11 @@ DEFAULT_SOURCES = [
     {"name": "Envy Careers",           "company": "Envy",               "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.envypost.co.uk/careers"},
     {"name": "Lola Post Careers",      "company": "Lola",               "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.lola-post.com/careers"},
     {"name": "ScreenSkills Jobs",      "company": "ScreenSkills",       "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.screenskills.com/jobs/"},
+    {"name": "Electric Theatre Careers","company": "Electric Theatre Collective","kind": "studio",      "priority": 2, "type": "html",       "url": "https://electrictheatre.tv/careers"},
+    {"name": "Untold Studios Teamtailor","company": "Untold Studios",   "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.untoldstudios.tv/jobs"},
+    {"name": "Untold Studios Careers", "company": "Untold Studios",     "kind": "studio",         "priority": 2, "type": "html",       "url": "https://untoldstudios.tv/careers/"},
+    {"name": "Animation UK Jobs",      "company": "Animation UK",       "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.animationuk.org/subpages/job-vacancies/"},
+    {"name": "UK Screen Alliance Jobs","company": "UK Screen Alliance", "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.ukscreenalliance.co.uk/subpages/job-vacancies/"},
 ]
 
 ATS_PATTERNS = {
@@ -220,7 +226,14 @@ def now_str():
 def canonicalize_url(url: str) -> str:
     if not url:
         return ""
-    parsed = urlparse(url.strip())
+    url = url.strip()
+    while url.startswith("https://https://") or url.startswith("http://http://"):
+        url = url.split("://", 1)[1]
+    if url.startswith("https://http://"):
+        url = "http://" + url[len("https://http://"):]
+    if url.startswith("http://https://"):
+        url = "https://" + url[len("http://https://"):]
+    parsed = urlparse(url)
     query  = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
               if not k.lower().startswith("utm_")]
     return urlunparse(parsed._replace(query=urlencode(query), fragment=""))
@@ -234,6 +247,36 @@ def normalize_text(text: str) -> str:
 def short_hash(*parts: str) -> str:
     joined = "|".join(normalize_text(p) for p in parts if p)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:24]
+
+def is_malformed_url(url: str) -> bool:
+    low = (url or "").strip().lower()
+    return low.startswith("https://https://") or low.startswith("http://http://")
+
+def same_or_subdomain(candidate_host: str, source_host: str) -> bool:
+    candidate_host = (candidate_host or "").lower()
+    source_host = (source_host or "").lower()
+    return candidate_host == source_host or candidate_host.endswith("." + source_host) or source_host.endswith("." + candidate_host)
+
+def is_allowed_html_link(source: dict, full_url: str) -> bool:
+    """
+    For generic HTML career pages, keep same-domain links and ATS links.
+    Drop unrelated external opportunity/community links that create false positives.
+    """
+    if not full_url:
+        return False
+    if identify_ats_type(full_url):
+        return True
+    source_host = urlparse(source["url"]).netloc.lower()
+    full_host = urlparse(full_url).netloc.lower()
+    return same_or_subdomain(full_host, source_host)
+
+def is_generic_html_title(title: str) -> bool:
+    low = normalize_text(title)
+    generic_titles = {
+        "internships", "work experience", "academy of animated art",
+        "change 100", "stem ambassador hub", "careers", "opportunities",
+    }
+    return low in generic_titles
 
 
 # ── CanonicalJob dataclass ────────────────────────────────────────────────────
@@ -506,14 +549,18 @@ def seed_defaults():
     if not get_state("paused"):        set_state("paused", "0")
     if not get_state("quality_mode"):  set_state("quality_mode", "off")
 
-    existing = db_execute("SELECT COUNT(*) FROM sources", fetch=True)
-    if not existing or existing[0][0] == 0:
-        for s in DEFAULT_SOURCES:
-            db_execute(
-                """INSERT OR IGNORE INTO sources (name, company, kind, priority, type, url, active, added_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
-                (s["name"], s["company"], s["kind"], s["priority"], s["type"], s["url"], now_str())
-            )
+    existing_sources = {
+        (row[0], row[1]) for row in db_execute("SELECT name, url FROM sources", fetch=True) or []
+    }
+    for s in DEFAULT_SOURCES:
+        key = (s["name"], s["url"])
+        if key in existing_sources:
+            continue
+        db_execute(
+            """INSERT INTO sources (name, company, kind, priority, type, url, active, added_at)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
+            (s["name"], s["company"], s["kind"], s["priority"], s["type"], s["url"], now_str())
+        )
 
 
 # ── Source registry ───────────────────────────────────────────────────────────
@@ -1180,6 +1227,7 @@ def collect_and_store_jobs(force: bool = False) -> list:
     sources   = get_active_sources()
     threshold = quality_threshold()
     all_matched = []
+    emitted_keys = set()
     seen_keys   = set()
     lock        = threading.Lock()
 
@@ -1231,7 +1279,8 @@ def collect_and_store_jobs(force: bool = False) -> list:
                 with lock:
                     created, unique_key = upsert_job(job)
                     seen_keys.add(unique_key)
-                    if created or force:
+                    if (created or force) and unique_key not in emitted_keys:
+                        emitted_keys.add(unique_key)
                         all_matched.append(job)
 
     expire_stale_jobs(seen_keys)
@@ -1329,8 +1378,18 @@ def latest_rows(hours=24, limit=10):
 def send_new_job_alerts(jobs: list):
     if not jobs:
         return
-    high   = [j for j in jobs if (j.score or 0) >= 75]
-    normal = [j for j in jobs if quality_threshold() <= (j.score or 0) < 75]
+
+    deduped = []
+    seen = set()
+    for job in jobs:
+        key = build_unique_key(job)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(job)
+
+    high   = [j for j in deduped if (j.score or 0) >= 75]
+    normal = [j for j in deduped if quality_threshold() <= (j.score or 0) < 75]
 
     for job in high[:6]:
         send_telegram_message(format_job_alert(job))
