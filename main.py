@@ -6,6 +6,7 @@ import sqlite3
 import hashlib
 import threading
 import concurrent.futures
+import html as html_lib
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -13,7 +14,7 @@ from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask
+from flask import Flask, request, redirect, url_for, render_template_string
 
 PORT = int(os.environ.get("PORT", "8080"))
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -1942,62 +1943,46 @@ def handle_command(text: str) -> str:
                ORDER BY sh.jobs_found_total DESC""",
             fetch=True,
         ) or []
-        active = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
+        active       = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
         total_active = active[0][0]
 
-        companies = {}
-        for source_name, last, total, last_ok, status, evt, company in rows:
-            label = company or source_name
-            item = companies.setdefault(label, {
-                "sources": 0,
-                "jobs_found_last": 0,
-                "jobs_found_total": 0,
-                "broken": 0,
-                "needs_attention": 0,
-            })
-            item["sources"] += 1
-            item["jobs_found_last"] += int(last or 0)
-            item["jobs_found_total"] += int(total or 0)
-
-            if status == "dead":
-                item["broken"] += 1
-            elif status == "degraded":
-                item["needs_attention"] += 1
+        def friendly_status(status, last_event, fails_implied=False):
+            if status == "healthy" and last_event == "success_nonzero": return "Working normally"
+            if status == "healthy" and last_event == "success_zero":    return "No jobs found recently"
+            if status == "suspect":                                      return "No jobs found recently"
+            if status == "degraded":                                     return "Needs attention"
+            if status == "dead":                                         return "Not responding"
+            if status == "unknown":                                      return "Not checked yet"
+            return "No jobs found recently"
 
         producing, quiet, broken = [], [], []
-        for label, item in companies.items():
-            source_note = (
-                f" across {item['sources']} source{'s' if item['sources'] != 1 else ''}"
-                if item["sources"] > 1 else ""
-            )
-            if item["jobs_found_last"] > 0:
-                producing.append((label, item["jobs_found_last"], item["jobs_found_total"], source_note))
-            elif item["broken"] > 0 or item["needs_attention"] > 0:
-                status_text = "Not responding" if item["broken"] > 0 and item["needs_attention"] == 0 else "Needs attention"
-                broken.append((label, status_text, source_note))
+        for r in rows:
+            name, last, total, last_ok, status, evt, company = r
+            label = company or name
+            fs    = friendly_status(status, evt)
+            if status in ("dead", "degraded"):
+                broken.append((label, fs))
+            elif (last or 0) > 0:
+                producing.append((label, last or 0, total or 0, last_ok))
             else:
-                quiet.append((label, "No jobs found recently", source_note))
+                quiet.append((label, fs))
 
-        producing.sort(key=lambda x: (-x[1], -x[2], x[0]))
-        quiet.sort(key=lambda x: x[0])
-        broken.sort(key=lambda x: x[0])
-
-        PLACEHOLDER
+        lines = [f"📡 Coverage report\n{total_active} studios monitored\n"]
 
         if producing:
             lines.append("Producing results:")
-            for company, last, total, source_note in producing[:12]:
-                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total){source_note}")
+            for company, last, total, last_ok in producing[:12]:
+                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total)")
 
         if quiet:
-            X
-            for company, fs, source_note in quiet[:10]:
-                lines.append(f"  🟡 {company} -- {fs}{source_note}")
+            lines.append("\nNo listings found (may be JS-rendered or currently quiet):")
+            for company, fs in quiet[:10]:
+                lines.append(f"  🟡 {company} -- {fs}")
 
         if broken:
-            lines.append("\nNeeds attention:")
-            for company, fs, source_note in broken:
-                lines.append(f"  ❌ {company} -- {fs}{source_note}")
+            lines.append("\nNot responding (URL may have changed):")
+            for company, fs in broken:
+                lines.append(f"  ❌ {company} -- {fs}")
 
         return "\n".join(lines)
 
@@ -2038,6 +2023,207 @@ def get_applied_jobs():
            ORDER BY ji.actioned_at DESC LIMIT 20""",
         fetch=True,
     ) or []
+
+
+# ── Web app helpers ───────────────────────────────────────────────────────────
+
+def get_active_jobs_web(limit: int = 200, q: str = "", kind: str = "all"):
+    sql = """
+        SELECT id, unique_key, title, company, location_raw, apply_url, first_seen, score, opportunity_type
+        FROM jobs
+        WHERE job_status='active'
+    """
+    params = []
+
+    if q:
+        sql += " AND (lower(title) LIKE ? OR lower(company) LIKE ?)"
+        like = f"%{q.lower()}%"
+        params.extend([like, like])
+
+    if kind == "direct":
+        sql += " AND (opportunity_type IS NULL OR opportunity_type != 'programme')"
+    elif kind == "programme":
+        sql += " AND opportunity_type = 'programme'"
+
+    sql += " ORDER BY score DESC, id DESC LIMIT ?"
+    params.append(limit)
+    return db_execute(sql, tuple(params), fetch=True) or []
+
+
+def get_saved_jobs_web():
+    return db_execute(
+        """
+        SELECT j.id, j.unique_key, j.title, j.company, j.location_raw, j.apply_url, j.first_seen, j.score, j.opportunity_type
+        FROM jobs j
+        JOIN job_interactions i ON j.unique_key = i.unique_key
+        WHERE i.action='saved' AND j.job_status='active'
+        ORDER BY j.score DESC, j.id DESC
+        """,
+        fetch=True,
+    ) or []
+
+
+def get_applied_jobs_web():
+    return db_execute(
+        """
+        SELECT j.id, j.unique_key, j.title, j.company, j.location_raw, j.apply_url, i.actioned_at, j.score, j.opportunity_type
+        FROM jobs j
+        JOIN job_interactions i ON j.unique_key = i.unique_key
+        WHERE i.action='applied'
+        ORDER BY i.actioned_at DESC
+        """,
+        fetch=True,
+    ) or []
+
+
+def get_job_by_id(job_id: int):
+    rows = db_execute(
+        """
+        SELECT id, unique_key, title, company, location_raw, location_normalized,
+               apply_url, first_seen, score, opportunity_type, source_name,
+               score_breakdown_json, description_text
+        FROM jobs
+        WHERE id=?
+        LIMIT 1
+        """,
+        (job_id,),
+        fetch=True,
+    )
+    return rows[0] if rows else None
+
+
+def has_interaction(unique_key: str, action: str) -> bool:
+    rows = db_execute(
+        "SELECT 1 FROM job_interactions WHERE unique_key=? AND action=? LIMIT 1",
+        (unique_key, action),
+        fetch=True,
+    )
+    return bool(rows)
+
+
+def remove_job_interaction_web(unique_key: str, action: str):
+    db_execute(
+        "DELETE FROM job_interactions WHERE unique_key=? AND action=?",
+        (unique_key, action),
+    )
+
+
+def web_nav(current: str = "") -> str:
+    items = [
+        ("/", "Home"),
+        ("/jobs", "Jobs"),
+        ("/saved", "Saved"),
+        ("/applied", "Applied"),
+        ("/coverage", "Coverage"),
+    ]
+    links = []
+    for href, label in items:
+        if href == current:
+            links.append(f"<strong>{label}</strong>")
+        else:
+            links.append(f'<a href="{href}">{label}</a>')
+    return " · ".join(links)
+
+
+def page_shell(title: str, body: str, current: str = "") -> str:
+    nav = web_nav(current)
+    return render_template_string(
+        """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>{{ title }}</title>
+          <style>
+            :root { color-scheme: light; }
+            body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; margin: 0; background: #f7f7fb; color: #111; }
+            .wrap { max-width: 920px; margin: 0 auto; padding: 20px; }
+            .top { margin-bottom: 18px; }
+            .nav { font-size: 14px; color: #666; margin-top: 8px; }
+            .nav a { color: #444; text-decoration: none; }
+            .card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+            .muted { color: #666; font-size: 14px; }
+            .title { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+            .jobtitle { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+            .chips { margin-top: 8px; margin-bottom: 10px; }
+            .chip { display: inline-block; font-size: 12px; padding: 5px 9px; border-radius: 999px; background: #f0f0f5; margin-right: 6px; margin-bottom: 6px; }
+            .actions a, .actions button { display: inline-block; margin-right: 8px; margin-top: 8px; text-decoration: none; border: 0; background: #111; color: white; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; }
+            .actions .secondary { background: #ececf2; color: #111; }
+            form.inline { display: inline; }
+            .search { background: white; border-radius: 16px; padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+            input[type=text], select { width: 100%; max-width: 320px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; margin-right: 8px; margin-bottom: 8px; }
+            button.filter { background: #111; color: white; border: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+            .desc { white-space: pre-wrap; line-height: 1.45; }
+          </style>
+        </head>
+        <body>
+          <div class="wrap">
+            <div class="top">
+              <div class="title">VFX Job Monitor</div>
+              <div class="muted">Entry-level production roles in VFX, animation and post-production.</div>
+              <div class="nav">{{ nav|safe }}</div>
+            </div>
+            {{ body|safe }}
+          </div>
+        </body>
+        </html>
+        """,
+        title=title,
+        body=body,
+        nav=nav,
+    )
+
+
+def render_job_card(job_row, show_applied_time: bool = False) -> str:
+    job_id, unique_key, title, company, loc, url, seen_or_applied, score, opp_type = job_row
+    title_e = html_lib.escape(title or "")
+    company_e = html_lib.escape(company or "")
+    url_e = html_lib.escape(url or "")
+    loc_text = prettify_location(loc) if loc else "Location not listed"
+    loc_e = html_lib.escape(loc_text)
+    label = "Programme / internship" if opp_type == "programme" else "Direct role"
+    icon = "🎓" if opp_type == "programme" else "🎯"
+
+    saved = has_interaction(unique_key, "saved")
+    applied = has_interaction(unique_key, "applied")
+
+    buttons = [
+        f'<a href="/job/{job_id}">View</a>',
+        f'<a href="{url_e}" target="_blank" rel="noopener" class="secondary">Open job</a>',
+    ]
+
+    if saved:
+        buttons.append(
+            f'<form class="inline" method="post" action="/unsave/{job_id}"><button class="secondary" type="submit">Unsave</button></form>'
+        )
+    else:
+        buttons.append(
+            f'<form class="inline" method="post" action="/save/{job_id}"><button class="secondary" type="submit">Save</button></form>'
+        )
+
+    if not applied:
+        buttons.append(
+            f'<form class="inline" method="post" action="/apply/{job_id}"><button class="secondary" type="submit">Mark applied</button></form>'
+        )
+
+    meta_line = f"First seen: {html_lib.escape(seen_or_applied or '')}"
+    if show_applied_time:
+        meta_line = f"Applied: {html_lib.escape(seen_or_applied or '')}"
+
+    return f"""
+      <div class="card">
+        <div class="jobtitle">{icon} {title_e}</div>
+        <div>{company_e}</div>
+        <div class="chips">
+          <span class="chip">{html_lib.escape(label)}</span>
+          <span class="chip">{loc_e}</span>
+          <span class="chip">Score {int(score or 0)}</span>
+        </div>
+        <div class="muted">{meta_line}</div>
+        <div class="actions">{''.join(buttons)}</div>
+      </div>
+    """
 
 ROLE_EXPLANATIONS = {
     "production assistant": (
@@ -2357,18 +2543,194 @@ def monitor_loop():
 
 @app.route("/")
 def home():
-    total   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-    sources = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
-    healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
-    return (
-        f"VFX Job Monitor -- Phase 2a\n"
-        f"Active jobs: {total} | Sources: {sources} | Healthy: {healthy}\n"
-        f"Last checked: {get_state('last_checked', 'Never')}"
-    ), 200
+    latest = db_execute(
+        """
+        SELECT id, unique_key, title, company, location_raw, apply_url, first_seen, score, opportunity_type
+        FROM jobs
+        WHERE job_status='active'
+        ORDER BY score DESC, id DESC
+        LIMIT 8
+        """,
+        fetch=True,
+    ) or []
+
+    total_active = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    direct_count = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND (opportunity_type IS NULL OR opportunity_type != 'programme')", fetch=True) or [[0]])[0][0]
+    programme_count = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND opportunity_type='programme'", fetch=True) or [[0]])[0][0]
+
+    cards = "".join(render_job_card(r) for r in latest) if latest else '<div class="card">No active jobs yet.</div>'
+
+    body = f"""
+      <div class="card">
+        <div class="jobtitle">Today’s overview</div>
+        <div class="chips">
+          <span class="chip">Active jobs {total_active}</span>
+          <span class="chip">Direct roles {direct_count}</span>
+          <span class="chip">Programmes {programme_count}</span>
+        </div>
+        <div class="actions">
+          <a href="/jobs">Browse jobs</a>
+          <a href="/saved" class="secondary">Saved</a>
+          <a href="/applied" class="secondary">Applied</a>
+          <a href="/coverage" class="secondary">Coverage</a>
+        </div>
+      </div>
+      {cards}
+    """
+    return page_shell("VFX Job Monitor", body, current="/")
+
 
 @app.route("/health")
 def health_check():
     return {"status": "ok"}, 200
+
+
+@app.route("/jobs")
+def web_jobs():
+    q = (request.args.get("q") or "").strip()
+    kind = (request.args.get("kind") or "all").strip()
+    rows = get_active_jobs_web(limit=200, q=q, kind=kind)
+
+    cards = "".join(render_job_card(r) for r in rows) if rows else '<div class="card">No matching jobs right now.</div>'
+
+    q_e = html_lib.escape(q)
+    body = f"""
+      <div class="search">
+        <form method="get" action="/jobs">
+          <input type="text" name="q" value="{q_e}" placeholder="Search by title or company">
+          <select name="kind">
+            <option value="all" {'selected' if kind=='all' else ''}>All opportunities</option>
+            <option value="direct" {'selected' if kind=='direct' else ''}>Direct roles only</option>
+            <option value="programme" {'selected' if kind=='programme' else ''}>Programmes only</option>
+          </select>
+          <button class="filter" type="submit">Filter</button>
+        </form>
+      </div>
+      {cards}
+    """
+    return page_shell("Jobs", body, current="/jobs")
+
+
+@app.route("/saved")
+def web_saved():
+    rows = get_saved_jobs_web()
+    body = "".join(render_job_card(r) for r in rows) if rows else '<div class="card">No saved jobs yet.</div>'
+    return page_shell("Saved jobs", body, current="/saved")
+
+
+@app.route("/applied")
+def web_applied_page():
+    rows = get_applied_jobs_web()
+    body = "".join(render_job_card(r, show_applied_time=True) for r in rows) if rows else '<div class="card">No applied jobs yet.</div>'
+    return page_shell("Applied jobs", body, current="/applied")
+
+
+@app.route("/coverage")
+def web_coverage():
+    source_count = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+    healthy_count = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
+
+    rows = db_execute(
+        """
+        SELECT company, COUNT(*), MAX(score)
+        FROM jobs
+        WHERE job_status='active'
+        GROUP BY company
+        ORDER BY COUNT(*) DESC, MAX(score) DESC
+        """,
+        fetch=True,
+    ) or []
+
+    items = ""
+    for company, count, max_score in rows:
+        items += f'<div class="card"><div class="jobtitle">{html_lib.escape(company or "Unknown")}</div><div class="muted">{count} active job(s) · top score {int(max_score or 0)}</div></div>'
+
+    if not items:
+        items = '<div class="card">No active jobs yet.</div>'
+
+    body = f"""
+      <div class="card">
+        <div class="jobtitle">Coverage overview</div>
+        <div class="chips">
+          <span class="chip">Active sources {source_count}</span>
+          <span class="chip">Healthy sources {healthy_count}</span>
+        </div>
+      </div>
+      {items}
+    """
+    return page_shell("Coverage", body, current="/coverage")
+
+
+@app.route("/job/<int:job_id>")
+def web_job_detail(job_id: int):
+    row = get_job_by_id(job_id)
+    if not row:
+        return page_shell("Job not found", '<div class="card">That job could not be found.</div>')
+
+    (
+        _id, unique_key, title, company, location_raw, location_normalized,
+        apply_url, first_seen, score, opportunity_type, source_name,
+        score_breakdown_json, description_text
+    ) = row
+
+    loc = prettify_location(location_raw or location_normalized)
+    label = "Programme / internship" if opportunity_type == "programme" else "Direct role"
+
+    actions = f"""
+      <div class="actions">
+        <a href="{html_lib.escape(apply_url or '')}" target="_blank" rel="noopener">Open official job page</a>
+        <form class="inline" method="post" action="/save/{job_id}">
+          <button class="secondary" type="submit">Save</button>
+        </form>
+        <form class="inline" method="post" action="/apply/{job_id}">
+          <button class="secondary" type="submit">Mark applied</button>
+        </form>
+      </div>
+    """
+
+    body = f"""
+      <div class="card">
+        <div class="jobtitle">{html_lib.escape(title or '')}</div>
+        <div>{html_lib.escape(company or '')}</div>
+        <div class="chips">
+          <span class="chip">{html_lib.escape(label)}</span>
+          <span class="chip">{html_lib.escape(loc)}</span>
+          <span class="chip">Score {int(score or 0)}</span>
+        </div>
+        <div class="muted">First seen: {html_lib.escape(first_seen or '')}</div>
+        <div class="muted">Source: {html_lib.escape(source_name or '')}</div>
+        {actions}
+      </div>
+      <div class="card">
+        <div class="jobtitle">Description</div>
+        <div class="desc muted">{html_lib.escape(description_text or 'No description stored.')}</div>
+      </div>
+    """
+    return page_shell(title or 'Job detail', body)
+
+
+@app.route("/save/<int:job_id>", methods=["POST"])
+def web_save_job(job_id: int):
+    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
+    if row:
+        mark_job_interaction(row[0][0], "saved")
+    return redirect(request.referrer or url_for("web_jobs"))
+
+
+@app.route("/unsave/<int:job_id>", methods=["POST"])
+def web_unsave_job(job_id: int):
+    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
+    if row:
+        remove_job_interaction_web(row[0][0], "saved")
+    return redirect(request.referrer or url_for("web_saved"))
+
+
+@app.route("/apply/<int:job_id>", methods=["POST"])
+def web_apply_job(job_id: int):
+    row = db_execute("SELECT unique_key FROM jobs WHERE id=? LIMIT 1", (job_id,), fetch=True)
+    if row:
+        mark_job_interaction(row[0][0], "applied")
+    return redirect(request.referrer or url_for("web_applied_page"))
 
 # ── Startup ────────────────────────────────────────────────────────────────────
 
