@@ -207,13 +207,26 @@ def is_allowed_html_link(source: dict, full_url: str) -> bool:
         return False
     parsed = urlparse(full_url)
     path   = normalize_text(parsed.path or "")
-    blocked = {
+
+    # Paths that are never job listings
+    blocked_exact = {
         "/contact", "/contacts", "/about", "/team", "/news", "/blog",
         "/our-work", "/work", "/services", "/projects", "/portfolio",
         "/case-study", "/case-studies", "/studio", "/capabilities",
+        "/subscribe", "/membership", "/members", "/join", "/donate",
+        "/privacy", "/terms", "/cookies", "/accessibility",
+        "/training", "/skills-checklists",
     }
-    if any(b in path for b in blocked):
+    blocked_contains = [
+        "/subscribe", "/membership", "/information-and-resources",
+        "/skills-checklists", "/training/screenskills",
+        "/applying-uk-film", "/tax-incentive", "/bfi-network",
+    ]
+    if any(path == b or path.startswith(b + "/") for b in blocked_exact):
         return False
+    if any(b in path for b in blocked_contains):
+        return False
+
     if identify_ats_type(full_url):
         return True
     source_host = urlparse(source["url"]).netloc.lower()
@@ -869,28 +882,41 @@ def prettify_location(loc: Optional[str]) -> str:
 
 def format_help_text() -> str:
     return (
-        "VFX Job Monitor\n\n"
-        "Checks VFX, animation and post-production hiring sources for entry-level production roles.\n\n"
-        "Core commands\n"
-        "/scan -- Run a fresh scan now\n"
-        "/jobs -- Browse saved active matches\n"
-        "/latest -- Jobs found in the last 24 hours\n"
-        "/search <term> -- Search by title or company\n"
-        "/status -- Bot status and settings\n"
-        "/help -- This guide\n\n"
-        "Settings\n"
-        "/setlocation london|uk|off\n"
-        "/quality strict|normal|off\n"
-        "/keywords -- Show keyword list\n"
-        "/addkeyword <phrase>\n"
-        "/removekeyword <phrase>\n\n"
-        "Control\n"
-        "/pause -- Pause scheduled monitoring\n"
-        "/resume -- Resume monitoring\n\n"
-        "Alert labels\n"
-        "Direct role -- likely a real vacancy\n"
-        "Programme / internship -- scheme or work experience\n\n"
-        "Tip: start with /scan"
+        "🎬 VFX Job Monitor\n\n"
+        "This bot watches 25+ VFX, animation and post-production studios and sends you alerts"
+        " when entry-level production roles appear. It runs automatically every 10 minutes.\n\n"
+        "── Start here ──\n\n"
+        "🚀 /scan\n"
+        "Run a fresh scan right now and send the best jobs found.\n\n"
+        "🗂️ /jobs\n"
+        "Browse the best jobs already saved by the bot.\n\n"
+        "🧭 /status\n"
+        "See how many sources are running, what was found last time, and your current settings.\n\n"
+        "── Main commands ──\n\n"
+        "✨ /latest\n"
+        "Show jobs found in the last 24 hours.\n\n"
+        "🔎 /search <term>\n"
+        "Search saved jobs by title or company name.\n\n"
+        "── Tuning ──\n\n"
+        "📍 /setlocation london | uk | off\n"
+        "Filter jobs by location. Use london to keep results tight, uk for wider coverage, off for everything.\n\n"
+        "🎚️ /quality strict | normal | off\n"
+        "Set how picky the score filter is. off shows everything that matches a keyword.\n\n"
+        "🧩 /keywords\n"
+        "See the list of job title keywords the bot looks for.\n\n"
+        "➕ /addkeyword <phrase>\n"
+        "Add a new keyword to watch for.\n\n"
+        "➖ /removekeyword <phrase>\n"
+        "Remove a keyword you no longer want.\n\n"
+        "── Operations ──\n\n"
+        "⏸️ /pause\n"
+        "Stop automatic scanning (you can still run /scan manually).\n\n"
+        "▶️ /resume\n"
+        "Turn automatic scanning back on.\n\n"
+        "── Alert labels ──\n\n"
+        "🎯 Direct role -- a real job vacancy at a studio\n"
+        "🎓 Programme / internship -- a scheme, traineeship or work experience opportunity\n\n"
+        "Tip: start with 🚀 /scan to see what's out there right now."
     )
 
 # ── Scraping ───────────────────────────────────────────────────────────────────
@@ -1007,6 +1033,15 @@ def generic_extract_jobs_from_soup(source: dict, soup) -> list:
         if not title or len(title) < 4:
             continue
         if low_title in nav_set or title.startswith("/") or title.startswith("http"):
+            continue
+        # Reject generic page headings that aren't actual job titles
+        generic_headings = {
+            "jobs", "careers", "vacancies", "openings", "opportunities",
+            "post production", "production", "animation", "vfx", "roles",
+            "current openings", "current vacancies", "view all jobs",
+            "all jobs", "job listings", "job board",
+        }
+        if low_title in generic_headings:
             continue
         if not any(t in normalize_text(f"{title} {context} {full_url}") for t in trigger):
             continue
@@ -1281,16 +1316,17 @@ def format_job_alert(job: CanonicalJob) -> str:
 
 def format_job_rows(rows) -> str:
     if not rows:
-        return "No active matches yet. Run /scan to check live sources now."
-    lines = ["Active jobs"]
+        return "📭 No active matches yet. Run /scan to check live sources now."
+    lines = ["🗂️ Saved jobs"]
     for idx, (title, company, loc, url, first_seen, score) in enumerate(rows[:10], 1):
         loc_text = prettify_location(loc) if loc else None
-        lines.append(f"\n{idx}. {title}")
-        lines.append(f"   {company}")
-        if loc_text: lines.append(f"   {loc_text}")
-        lines.append(f"   Score {int(score)}")
-        lines.append(f"   First seen {first_seen}")
-        lines.append(f"   {url}")
+        kind_icon = "🎓" if any(t in title.lower() for t in ["intern", "trainee", "scheme", "programme", "program", "launchpad", "work experience"]) else "🎯"
+        lines.append(f"\n{idx}. {kind_icon} {title}")
+        lines.append(f"   🏢 {company}")
+        if loc_text: lines.append(f"   📍 {loc_text}")
+        lines.append(f"   ⭐ Score {int(score)}")
+        lines.append(f"   🕘 First seen {first_seen}")
+        lines.append(f"   🔗 {url}")
     return "\n".join(lines)
 
 def latest_rows(hours=24, limit=10):
@@ -1546,7 +1582,7 @@ def handle_command(text: str) -> str:
                FROM job_events ORDER BY id DESC LIMIT 12""",
             fetch=True,
         )
-        if not rows: return "No job changes recorded yet."
+        if not rows: return "🕘 No job changes recorded yet."
         icon = {"created": "NEW", "updated": "UPD", "reopened": "REOPEN", "expired": "EXP"}
         lines = ["Recent activity"]
         for etype, eat, sname, old_json, new_json, notes in rows:
@@ -1563,19 +1599,22 @@ def handle_command(text: str) -> str:
         healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
         n_src   = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
         paused  = get_state("paused", "0") == "1"
+        mode    = get_state("location_mode", "london")
+        quality = get_state("quality_mode", "off")
         return (
-            f"VFX Job Monitor\n\n"
-            f"{'Paused' if paused else 'Running'}\n"
-            f"Sources: {n_src} active, {healthy} healthy\n"
-            f"Active matches: {total}\n"
-            f"Location: {get_state('location_mode','london')}\n"
-            f"Quality: {get_state('quality_mode','off')} (threshold {quality_threshold()})\n"
-            f"Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
-            f"Last checked: {get_state('last_checked','Never')}\n"
-            f"Matches last run: {get_state('last_match_count','0')}\n\n"
-            f"/scan -- fresh results now\n"
-            f"/jobs -- browse saved matches\n"
-            f"/scandebug -- per-source diagnostics"
+            f"🎬 VFX Job Monitor\n\n"
+            f"{'⏸️ Paused' if paused else '▶️ Running'}\n\n"
+            f"🛰️ Sources: {n_src} active, {healthy} healthy\n"
+            f"🗂️ Active matches: {total}\n"
+            f"✨ Matches found last run: {get_state('last_match_count', '0')}\n\n"
+            f"📍 Location: {mode}\n"
+            f"🎚️ Quality: {quality}\n"
+            f"Score threshold: {quality_threshold()}\n"
+            f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
+            f"🕘 Last checked: {get_state('last_checked', 'Never')}\n\n"
+            f"🚀 /scan -- run a fresh scan now\n"
+            f"🗂️ /jobs -- browse saved jobs\n"
+            f"🧪 /scandebug -- per-source detail (for testing)"
         )
 
     if lower == "/jobs":
@@ -1730,9 +1769,11 @@ def start_background_threads():
     threading.Thread(target=monitor_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
     send_telegram_message(
-        "VFX Monitor -- Phase 2a live\n"
-        "ATS discovery engine, job event history, improved HTML extractor\n"
-        "Commands: /scan /jobs /discoveries /events /help"
+        "🎬 VFX Job Monitor is live\n\n"
+        "Watching 25+ studios and industry boards for entry-level production roles.\n\n"
+        "🚀 /scan -- run a fresh scan now\n"
+        "🗂️ /jobs -- browse saved matches\n"
+        "❓ /help -- full guide"
     )
 
 start_background_threads()
