@@ -551,14 +551,20 @@ def seed_defaults():
     if not get_state("quality_mode"):  set_state("quality_mode", "off")
 
     existing_sources = {
-        (r[0], r[1]) for r in db_execute("SELECT name, url FROM sources", fetch=True) or []
+        r[0]: r[1] for r in db_execute("SELECT name, type FROM sources", fetch=True) or []
+    }
+    existing_urls = {
+        r[0] for r in db_execute("SELECT url FROM sources", fetch=True) or []
     }
     for s in DEFAULT_SOURCES:
-        if (s["name"], s["url"]) not in existing_sources:
+        if s["url"] not in existing_urls and s["name"] not in existing_sources:
             db_execute(
                 "INSERT INTO sources (name, company, kind, priority, type, url, active, added_at) VALUES (?,?,?,?,?,?,1,?)",
                 (s["name"], s["company"], s["kind"], s["priority"], s["type"], s["url"], now_str())
             )
+        elif s["name"] in existing_sources and existing_sources[s["name"]] != s["type"]:
+            # Sync type if it changed in DEFAULT_SOURCES
+            db_execute("UPDATE sources SET type=? WHERE name=?", (s["type"], s["name"]))
 
 # ── Source registry ────────────────────────────────────────────────────────────
 
@@ -1860,6 +1866,18 @@ def handle_command(text: str) -> str:
         if total > 30:
             send_telegram_message(f"...and {total-30} more. Use /search <company> to filter.")
         return ""
+
+    if lower == "/fixsources":
+        # Force-sync source types from DEFAULT_SOURCES to DB
+        fixed = []
+        for s in DEFAULT_SOURCES:
+            rows = db_execute("SELECT type FROM sources WHERE name=?", (s["name"],), fetch=True)
+            if rows and rows[0][0] != s["type"]:
+                db_execute("UPDATE sources SET type=? WHERE name=?", (s["type"], s["name"]))
+                fixed.append(f"{s['name']}: {rows[0][0]} -> {s['type']}")
+        if fixed:
+            return "Fixed source types:\n" + "\n".join(fixed)
+        return "All source types already up to date."
 
     if lower == "/diag":
         def _diag():
