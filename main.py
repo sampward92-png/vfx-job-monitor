@@ -64,7 +64,7 @@ DEFAULT_EXCLUDES = [
     "accountant", "finance manager", "legal ", "lawyer", "solicitor",
     "sales ", "business development", "marketing manager",
     # Specific non-production programmes
-    "jedi academy", "animation launchpad", "animation - launchpad", "animation intern",
+    "jedi academy", "animation launchpad", "animation-launchpad", "animation - launchpad", "animation intern",
 ]
 
 PROGRAMME_TERMS = [
@@ -449,6 +449,14 @@ def init_db():
             new_value_json TEXT,
             source_name    TEXT,
             notes          TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS job_interactions (
+            unique_key   TEXT NOT NULL,
+            action       TEXT NOT NULL,
+            actioned_at  TEXT NOT NULL,
+            PRIMARY KEY (unique_key, action)
         )
     """)
 
@@ -913,6 +921,10 @@ def format_help_text() -> str:
         "Stop automatic scanning (you can still run /scan manually).\n\n"
         "▶️ /resume\n"
         "Turn automatic scanning back on.\n\n"
+        "📌 /applied\n"
+        "See jobs you've marked as applied.\n\n"
+        "📋 /menu\n"
+        "Show the main menu buttons anytime.\n\n"
         "── Alert labels ──\n\n"
         "🎯 Direct role -- a real job vacancy at a studio\n"
         "🎓 Programme / internship -- a scheme, traineeship or work experience opportunity\n\n"
@@ -1254,18 +1266,51 @@ def collect_and_store_jobs(force: bool = False) -> list:
 
 # ── Telegram ───────────────────────────────────────────────────────────────────
 
-def send_telegram_message(text, chat_id=None):
+def send_telegram_message(text, chat_id=None, buttons=None):
     if not TELEGRAM_BOT_TOKEN: return
     target = str(chat_id or TELEGRAM_CHAT_ID).strip()
     if not target: return
     try:
+        payload = {
+            "chat_id": target,
+            "text": text[:4000],
+            "disable_web_page_preview": True,
+        }
+        if buttons:
+            payload["reply_markup"] = {"inline_keyboard": buttons}
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": target, "text": text[:4000], "disable_web_page_preview": True},
+            json=payload,
             timeout=20,
         )
     except Exception:
         pass
+
+def answer_callback(callback_id: str):
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
+            json={"callback_query_id": callback_id},
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+def main_menu_buttons():
+    return [
+        [{"text": "🚀 Scan for jobs", "callback_data": "/scan"},
+         {"text": "🗂 Saved jobs",    "callback_data": "/jobs"}],
+        [{"text": "✨ Last 24h",       "callback_data": "/latest"},
+         {"text": "🧭 Status",         "callback_data": "/status"}],
+        [{"text": "❓ Help",           "callback_data": "/help"}],
+    ]
+
+def send_menu(chat_id=None):
+    send_telegram_message(
+        "📋 What would you like to do?",
+        chat_id=chat_id,
+        buttons=main_menu_buttons(),
+    )
 
 def telegram_api(method, payload=None):
     r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}",
@@ -1314,9 +1359,26 @@ def format_job_alert(job: CanonicalJob) -> str:
         lines.append(f"🔗 {job.apply_url}")
     return "\n".join(lines)
 
+def send_job_alert(job: CanonicalJob, chat_id=None):
+    text    = format_job_alert(job)
+    buttons = None
+    if job.apply_url:
+        unique_key = build_unique_key(job)
+        buttons = [
+            [{"text": "🔗 Open job", "url": job.apply_url}],
+            [{"text": "📌 Mark as applied", "callback_data": f"applied::{unique_key}"},
+             {"text": "🚫 Ignore",           "callback_data": f"ignore::{unique_key}"}],
+        ]
+    send_telegram_message(text, chat_id=chat_id, buttons=buttons)
+
 def format_job_rows(rows) -> str:
     if not rows:
-        return "📭 No active matches yet. Run /scan to check live sources now."
+        return (
+            "📭 Nothing new right now.\n\n"
+            "Production roles often appear mid-week, so more listings may show up soon.\n\n"
+            "I'll keep monitoring studios and alert you when anything appears.\n\n"
+            "Try 🚀 /scan to check live sources right now."
+        )
     lines = ["🗂️ Saved jobs"]
     for idx, (title, company, loc, url, first_seen, score) in enumerate(rows[:10], 1):
         loc_text = prettify_location(loc) if loc else None
@@ -1352,7 +1414,7 @@ def send_new_job_alerts(jobs: list):
     programmes   = [j for j in deduped if classify_opportunity(j) == "programme" and (j.score or 0) >= qt]
 
     for job in high[:6]:
-        send_telegram_message(format_job_alert(job)); time.sleep(0.5)
+        send_job_alert(job); time.sleep(0.5)
 
     summary = []
     if normal_roles and get_state("quality_mode", "off").lower() != "strict":
@@ -1558,14 +1620,14 @@ def handle_command(text: str) -> str:
                 if direct_roles:
                     send_telegram_message(f"Top direct roles ({min(len(direct_roles),10)} shown):")
                     for job in direct_roles[:10]:
-                        send_telegram_message(format_job_alert(job)); time.sleep(0.5)
+                        send_job_alert(job); time.sleep(0.5)
                     if len(direct_roles) > 10:
                         send_telegram_message(f"...and {len(direct_roles)-10} more. Use /jobs to see all.")
 
                 if programme_roles:
                     send_telegram_message(f"Programme signals ({min(len(programme_roles),5)} shown):")
                     for job in programme_roles[:5]:
-                        send_telegram_message(format_job_alert(job)); time.sleep(0.5)
+                        send_job_alert(job); time.sleep(0.5)
                     if len(programme_roles) > 5:
                         send_telegram_message(f"...and {len(programme_roles)-5} more. Use /jobs to see all.")
 
@@ -1708,20 +1770,163 @@ def handle_command(text: str) -> str:
 
 # ── Background threads ─────────────────────────────────────────────────────────
 
+# ── Job interactions ───────────────────────────────────────────────────────────
+
+def mark_job_interaction(unique_key: str, action: str):
+    db_execute(
+        "INSERT OR REPLACE INTO job_interactions (unique_key, action, actioned_at) VALUES (?,?,?)",
+        (unique_key, action, now_str()),
+    )
+
+def get_applied_jobs():
+    return db_execute(
+        """SELECT j.title, j.company, j.apply_url, ji.actioned_at
+           FROM job_interactions ji
+           JOIN jobs j ON j.unique_key = ji.unique_key
+           WHERE ji.action='applied'
+           ORDER BY ji.actioned_at DESC LIMIT 20""",
+        fetch=True,
+    ) or []
+
+def handle_callback(callback_query: dict, chat_id: str):
+    data = callback_query.get("data", "")
+    cb_id = callback_query.get("id", "")
+    answer_callback(cb_id)
+
+    # Inline menu buttons trigger commands
+    if data.startswith("/"):
+        reply = handle_command(data)
+        if reply:
+            send_telegram_message(reply, chat_id=chat_id, buttons=(
+                main_menu_buttons() if data in {"/help", "/status"} else None
+            ))
+        return
+
+    if data.startswith("applied::"):
+        unique_key = data[len("applied::"):]
+        mark_job_interaction(unique_key, "applied")
+        send_telegram_message("📌 Marked as applied. Good luck!", chat_id=chat_id)
+        return
+
+    if data.startswith("ignore::"):
+        unique_key = data[len("ignore::"):]
+        mark_job_interaction(unique_key, "ignored")
+        send_telegram_message("Got it. I'll note that.", chat_id=chat_id)
+        return
+
+    if data.startswith("location::"):
+        mode = data[len("location::"):]
+        set_state("location_mode", mode)
+        send_telegram_message(
+            f"📍 Location set to {mode}.\n\nWhat kinds of opportunities should I highlight?",
+            chat_id=chat_id,
+            buttons=[[
+                {"text": "🎯 Direct roles only",          "callback_data": "opptype::direct"},
+                {"text": "🎓 Programmes only",            "callback_data": "opptype::programme"},
+                {"text": "Both",                          "callback_data": "opptype::both"},
+            ]],
+        )
+        return
+
+    if data.startswith("opptype::"):
+        set_state("opportunity_type_pref", data[len("opptype::"):])
+        send_telegram_message(
+            "How often should scans run?",
+            chat_id=chat_id,
+            buttons=[[
+                {"text": "Every 10 min",  "callback_data": "interval::600"},
+                {"text": "Every 30 min",  "callback_data": "interval::1800"},
+                {"text": "Every hour",    "callback_data": "interval::3600"},
+            ]],
+        )
+        return
+
+    if data.startswith("interval::"):
+        # Can't change env var at runtime, but store preference
+        set_state("scan_interval_pref", data[len("interval::"):])
+        send_telegram_message(
+            "You're all set.\n\nI'll monitor studios and send alerts when relevant opportunities appear.",
+            chat_id=chat_id,
+            buttons=[
+                [{"text": "🚀 Scan now",      "callback_data": "/scan"},
+                 {"text": "🗂 View saved jobs", "callback_data": "/jobs"}],
+                [{"text": "⚙️ Settings",       "callback_data": "/status"}],
+            ],
+        )
+        return
+
 def command_loop():
     offset = None
     while True:
         try:
-            for update in get_updates(offset):
+            updates = get_updates(offset)
+            for update in updates:
                 offset  = update["update_id"] + 1
+
+                # Handle inline button callbacks
+                if "callback_query" in update:
+                    cq      = update["callback_query"]
+                    chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
+                    if TELEGRAM_CHAT_ID and chat_id != TELEGRAM_CHAT_ID:
+                        continue
+                    handle_callback(cq, chat_id)
+                    continue
+
                 msg     = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))
                 text    = msg.get("text", "")
                 if TELEGRAM_CHAT_ID and chat_id != TELEGRAM_CHAT_ID:
                     continue
-                if text.startswith("/"):
-                    reply = handle_command(text)
-                    if reply: send_telegram_message(reply, chat_id=chat_id)
+                if not text.startswith("/"):
+                    continue
+
+                lower = text.strip().lower()
+
+                # Onboarding flow for /start
+                if lower == "/start":
+                    send_telegram_message(
+                        "🎬 VFX Job Monitor\n\n"
+                        "This bot watches VFX, animation and post-production studios and alerts you "
+                        "when entry-level production roles appear.\n\n"
+                        "It scans studios automatically and highlights the strongest opportunities.\n\n"
+                        "Let's set it up quickly.\n\n"
+                        "Where should I focus?",
+                        chat_id=chat_id,
+                        buttons=[[
+                            {"text": "📍 London only",      "callback_data": "location::london"},
+                            {"text": "🇬🇧 Anywhere in UK",  "callback_data": "location::uk"},
+                            {"text": "🌍 Anywhere",         "callback_data": "location::off"},
+                        ]],
+                    )
+                    continue
+
+                # /menu always shows the main nav
+                if lower == "/menu":
+                    send_menu(chat_id=chat_id)
+                    continue
+
+                # /applied shows tracked applications
+                if lower == "/applied":
+                    rows = get_applied_jobs()
+                    if not rows:
+                        send_telegram_message(
+                            "📌 No applications tracked yet.\n\nTap 'Mark as applied' on any job alert to track it here.",
+                            chat_id=chat_id,
+                        )
+                    else:
+                        lines = ["📌 Applied jobs\n"]
+                        for i, (title, company, url, at) in enumerate(rows, 1):
+                            lines.append(f"{i}. {title} -- {company}")
+                            lines.append(f"   Applied: {at[:10]}")
+                            if url: lines.append(f"   {url}")
+                        send_telegram_message("\n".join(lines), chat_id=chat_id)
+                    continue
+
+                reply = handle_command(text)
+                if reply:
+                    # Add menu buttons after help and status
+                    btns = main_menu_buttons() if lower in {"/help", "/howto", "/status"} else None
+                    send_telegram_message(reply, chat_id=chat_id, buttons=btns)
         except Exception:
             pass
         time.sleep(3)
