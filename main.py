@@ -970,36 +970,55 @@ def opportunity_label(job: CanonicalJob) -> str:
     return "Programme / internship" if classify_opportunity(job) == "programme" else "Direct role"
 
 
+def prettify_location(loc: Optional[str]) -> str:
+    if not loc:
+        return "Location not listed"
+    if loc == "Unknown-UK-Studio":
+        return "UK studio (location not explicit)"
+    if loc == "UK":
+        return "UK"
+    if loc == "London":
+        return "London"
+    return loc
+
+
 def format_help_text() -> str:
     return (
         "🤖 VFX Job Monitor\n\n"
-        "Quick start\n"
-        "• /scan — run a fresh scan now\n"
-        "• /scandebug — scan with per-source diagnostics\n"
-        "• /jobs — top saved matches\n"
-        "• /status — current bot settings and health\n\n"
-        "How it works\n"
-        "• The bot watches VFX / animation / post-production sources\n"
-        "• It scores likely entry-level production roles\n"
-        "• Telegram alerts show the strongest matches first\n\n"
-        "Useful commands\n"
-        "• /latest — roles found in the last 24h\n"
+        "What this bot does\n"
+        "• Watches VFX, animation and post-production job sources\n"
+        "• Looks for entry-level production-style roles in London / the UK\n"
+        "• Sends the strongest matches to Telegram\n\n"
+        "Start here\n"
+        "• /status — see whether the bot is running and how it is configured\n"
+        "• /scan — run a fresh scan now and send the top matches from this run\n"
+        "• /jobs — see the best active matches already saved in the database\n"
+        "• /scandebug — run a scan with source-by-source diagnostics\n\n"
+        "When to use each command\n"
+        "• /scan — use this when you want fresh results right now\n"
+        "• /jobs — use this when you want to browse what the bot already saved\n"
+        "• /latest — roles first seen in the last 24 hours\n"
         "• /highpriority — strongest saved matches\n"
-        "• /search <term> — search saved jobs by title/company\n"
-        "• /showall — top stored matches in the database\n\n"
-        "Tuning\n"
-        "• /setlocation london|uk|off\n"
-        "• /quality strict|normal|off\n"
-        "• /keywords\n"
-        "• /addkeyword <phrase>\n"
-        "• /removekeyword <phrase>\n\n"
-        "Operations\n"
-        "• /sources — monitored sources\n"
-        "• /health — source health summary\n"
-        "• /dead — degraded/dead/suspect sources\n"
-        "• /pause /resume\n\n"
-        "Tip\n"
-        "Use /quality off + /scandebug when tuning coverage, then switch back to /quality normal for live alerts."
+        "• /search <term> — search saved jobs by title or company\n"
+        "• /showall — show the top stored matches in the database\n\n"
+        "Tuning the bot\n"
+        "• /setlocation london|uk|off — control location filtering\n"
+        "• /quality strict|normal|off — control how selective scoring is\n"
+        "• /keywords — show the current keyword list\n"
+        "• /addkeyword <phrase> — add a phrase to match\n"
+        "• /removekeyword <phrase> — remove a phrase\n\n"
+        "Operations and checks\n"
+        "• /sources — show monitored sources\n"
+        "• /health — summary of source health\n"
+        "• /dead — degraded, dead or suspect sources\n"
+        "• /pause /resume — stop or restart monitoring\n\n"
+        "Good default setup\n"
+        "• Keep /setlocation london for London-first roles\n"
+        "• Keep /quality normal for day-to-day alerts\n"
+        "• Use /quality off + /scandebug when tuning coverage\n\n"
+        "What the alerts mean\n"
+        "• Direct role — likely an actual job opening\n"
+        "• Programme / internship — useful junior-entry signal, but not always a direct vacancy\n"
     )
 
 
@@ -1433,7 +1452,7 @@ def get_updates(offset=None):
 def format_job_alert(job: CanonicalJob) -> str:
     """Telegram-friendly alert card."""
     bd = job.score_breakdown or {}
-    loc = job.location_raw or job.location_normalized or "Unknown"
+    loc = prettify_location(job.location_raw or job.location_normalized)
     kind = classify_opportunity(job)
     kind_label = opportunity_label(job)
 
@@ -1486,7 +1505,7 @@ def format_job_rows(rows) -> str:
     lines = []
     for idx, row in enumerate(rows, 1):
         title, company, loc, url, first_seen, score = row
-        loc_part = f" | {loc}" if loc else ""
+        loc_part = f" | {prettify_location(loc)}" if loc else ""
         lines.append(f"{idx}. {title} — {company}{loc_part}\nScore: {int(score)}\n{url}\nFound: {first_seen}\n")
     return "\n".join(lines[:10])
 
@@ -1525,8 +1544,8 @@ def send_new_job_alerts(jobs: list):
     if normal_roles and get_state("quality_mode", "normal").lower() != "strict":
         summary_lines.append(f"📋 {len(normal_roles)} more role{'s' if len(normal_roles) != 1 else ''}:")
         for job in normal_roles[:6]:
-            loc = job.location_raw or job.location_normalized or ""
-            loc_part = f" | {loc}" if loc else ""
+            loc = prettify_location(job.location_raw or job.location_normalized)
+            loc_part = f" | {prettify_location(loc)}" if loc else ""
             summary_lines.append(f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})")
             summary_lines.append(f"  {job.apply_url}")
 
@@ -1535,8 +1554,8 @@ def send_new_job_alerts(jobs: list):
             summary_lines.append("")
         summary_lines.append(f"🎓 {len(programmes)} programme / internship signal{'s' if len(programmes) != 1 else ''}:")
         for job in programmes[:4]:
-            loc = job.location_raw or job.location_normalized or ""
-            loc_part = f" | {loc}" if loc else ""
+            loc = prettify_location(job.location_raw or job.location_normalized)
+            loc_part = f" | {prettify_location(loc)}" if loc else ""
             summary_lines.append(f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})")
             summary_lines.append(f"  {job.apply_url}")
 
@@ -1769,12 +1788,35 @@ def handle_command(text: str) -> str:
                 if not all_matched:
                     return
 
-                send_telegram_message(f"Sending top {min(len(all_matched), 10)}:")
-                for job in all_matched[:10]:
-                    send_telegram_message(format_job_alert(job))
-                    time.sleep(0.5)
-                if len(all_matched) > 10:
-                    send_telegram_message(f"...and {len(all_matched) - 10} more. Use /jobs to see all.")
+                deduped = []
+                seen_alert_keys = set()
+                for job in all_matched:
+                    key = build_unique_key(job)
+                    if key in seen_alert_keys:
+                        continue
+                    seen_alert_keys.add(key)
+                    deduped.append(job)
+
+                direct_roles = [j for j in deduped if classify_opportunity(j) != "programme"]
+                programme_roles = [j for j in deduped if classify_opportunity(j) == "programme"]
+
+                if direct_roles:
+                    send_telegram_message(f"🎯 Top direct roles ({min(len(direct_roles), 10)} shown):")
+                    for job in direct_roles[:10]:
+                        send_telegram_message(format_job_alert(job))
+                        time.sleep(0.5)
+                    remaining_direct = len(direct_roles) - min(len(direct_roles), 10)
+                    if remaining_direct > 0:
+                        send_telegram_message(f"...and {remaining_direct} more direct role{'s' if remaining_direct != 1 else ''}. Use /jobs to see all.")
+
+                if programme_roles:
+                    send_telegram_message(f"🎓 Programme / internship signals ({min(len(programme_roles), 5)} shown):")
+                    for job in programme_roles[:5]:
+                        send_telegram_message(format_job_alert(job))
+                        time.sleep(0.5)
+                    remaining_programmes = len(programme_roles) - min(len(programme_roles), 5)
+                    if remaining_programmes > 0:
+                        send_telegram_message(f"...and {remaining_programmes} more programme signal{'s' if remaining_programmes != 1 else ''}. Use /jobs to see all.")
 
             except Exception as e:
                 import traceback
@@ -1791,13 +1833,14 @@ def handle_command(text: str) -> str:
         return (
             f"{'⏸ Paused' if paused else '▶️ Running'}\n"
             f"Sources: {active_sources} active | {healthy} healthy\n"
-            f"Saved matches: {total}\n"
-            f"Location: {get_state('location_mode','london')}\n"
-            f"Quality: {get_state('quality_mode','normal')} (threshold ≥ {quality_threshold()})\n"
+            f"Active matches: {total}\n"
+            f"Location mode: {get_state('location_mode','london')}\n"
+            f"Quality mode: {get_state('quality_mode','normal')}\n"
+            f"Score threshold: {quality_threshold()}\n"
             f"Interval: {CHECK_INTERVAL_SECONDS}s\n"
             f"Last checked: {get_state('last_checked','Never')}\n"
             f"New last run: {get_state('last_match_count','0')}\n\n"
-            f"Tips: /scan for a fresh run, /scandebug to inspect source-by-source results."
+            f"Need fresh results? Use /scan. Need diagnostics? Use /scandebug."
         )
 
     if lower == "/jobs":
