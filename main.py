@@ -2471,8 +2471,6 @@ _CSS = (
 )
 
 
-_CSS = """ """ # replaced below
-
 def _nav(active=""):
     links = [("Home", "/"), ("Jobs", "/jobs"), ("Saved", "/saved"),
              ("Applied", "/applied"), ("Coverage", "/coverage")]
