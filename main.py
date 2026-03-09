@@ -267,8 +267,48 @@ class CanonicalJob:
         parts = "|".join(normalize_text(p) for p in [company, title, location] if p)
         return hashlib.sha1(parts.encode()).hexdigest()
 
+# Signals that indicate a page is a real job listing (not a directory/index page)
+_JOB_PAGE_SIGNALS = {
+    "apply", "apply now", "job description", "responsibilities", "requirements",
+    "location", "salary", "contract", "full time", "part time", "full-time",
+    "part-time", "about the role", "what you'll do", "what you will do",
+    "qualifications", "experience required", "the role", "we are looking for",
+    "you will", "you'll be", "closing date", "start date", "benefits",
+}
+
+# Titles that are clearly navigation/index pages, not real job titles
+_GENERIC_TITLES = {
+    "careers", "jobs", "opportunities", "skills", "main navigation", "navigation",
+    "careers, skills and jobs", "learn more", "browse roles", "see vacancies",
+    "vacancies", "openings", "roles", "current vacancies", "current openings",
+    "job listings", "job board", "all jobs", "view all jobs", "see all roles",
+    "find a job", "find jobs", "search jobs", "work with us", "join our team",
+    "join us", "hiring", "explore careers", "explore roles",
+}
+
+def is_real_job_page(title: str, body: str) -> bool:
+    """
+    Returns True only if the page looks like an actual job/opportunity listing.
+    Rejects navigation pages, careers landing pages, and job board index pages.
+    JSON-LD JobPosting pages bypass this check entirely (self-validating).
+    """
+    low_title = title.strip().lower()
+    if low_title in _GENERIC_TITLES:
+        return False
+    if len(low_title) <= 15 and low_title in {
+        "jobs", "careers", "skills", "roles", "vacancies", "opportunities", "hiring"
+    }:
+        return False
+    # Require at least one real job-page signal in the body
+    low_body = body.lower()
+    return any(sig in low_body for sig in _JOB_PAGE_SIGNALS)
+
+
 def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
     title    = clean_text(raw.get("title", ""))
+    # Reject generic navigation/index titles before they enter the pipeline
+    if title.strip().lower() in _GENERIC_TITLES:
+        title = ""  # Will fail keyword match downstream -- safe rejection path
     company  = raw.get("company", source.get("company", ""))
     url      = raw.get("url", "")
     location = clean_text(raw.get("location", "") or "")
@@ -1165,6 +1205,11 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
             raw.get("body", ""),
         ]))[:2000]
 
+        # Only accept enrichment if page looks like a real job listing.
+        # JSON-LD JobPosting is self-validating -- only gate non-JSON-LD pages.
+        if not jsonld_title and not is_real_job_page(best_title, enriched_body):
+            return raw  # Index/nav page -- discard enrichment, keep original
+
         enriched["title"]    = best_title
         enriched["body"]     = enriched_body
         if jsonld_loc:
@@ -1552,7 +1597,7 @@ def send_new_job_alerts(jobs: list):
 
     summary = []
     if normal_roles and get_state("quality_mode", "off").lower() != "strict":
-        summary.append(f"{len(normal_roles)} more role{'s' if len(normal_roles)!=1 else ''}:")
+        summary.append("Other possible matches:")
         for job in normal_roles[:6]:
             loc_part = f" | {prettify_location(job.location_raw or job.location_normalized)}"
             summary += [f"- {job.title} -- {job.company}{loc_part} (score: {int(job.score or 0)})", f"  {job.apply_url}"]
