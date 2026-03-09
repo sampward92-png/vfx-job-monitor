@@ -1458,7 +1458,7 @@ def handle_command(text: str) -> str:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     futures = {executor.submit(_scrape_one, s): s for s in sources}
-                    for future in concurrent.futures.as_completed(futures, timeout=30):
+                    for future in concurrent.futures.as_completed(futures, timeout=60):
                         try:
                             source, raw_jobs, discovered, err = future.result()
                         except concurrent.futures.TimeoutError:
