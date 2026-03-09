@@ -144,6 +144,40 @@ DEFAULT_EXCLUDES = [
     "animation intern",        # animation-specific internship
 ]
 
+
+PROGRAMME_TERMS = [
+    "internship",
+    "internships",
+    "trainee",
+    "traineeship",
+    "academy",
+    "work experience",
+    "launchpad",
+    "placement",
+    "placements",
+    "graduate programme",
+    "graduate program",
+    "graduate scheme",
+]
+
+DIRECT_ROLE_TERMS = [
+    "production assistant",
+    "production coordinator",
+    "junior production coordinator",
+    "assistant producer",
+    "studio runner",
+    "production runner",
+    "runner",
+    "studio assistant",
+    "project assistant",
+    "project coordinator",
+    "post production assistant",
+    "post-production assistant",
+    "post production runner",
+    "post-production runner",
+    "team assistant",
+]
+
 UK_STUDIO_COMPANIES = {
     "Framestore", "Nexus Studios", "DNEG", "Cinesite", "Blue Zoo",
     "Jellyfish Pictures", "ILM", "Milk", "BlueBolt", "Outpost",
@@ -914,6 +948,62 @@ def classify_rejection(job: CanonicalJob, threshold: float) -> str:
     return "passed"
 
 
+def classify_opportunity(job: CanonicalJob) -> str:
+    """
+    Returns:
+      - direct_role
+      - programme
+    """
+    title = normalize_text(job.title)
+    blob = normalize_text(f"{job.title} {job.description_text or ''} {job.apply_url or ''}")
+
+    if any(term in title for term in DIRECT_ROLE_TERMS):
+        return "direct_role"
+
+    if any(term in blob for term in PROGRAMME_TERMS):
+        return "programme"
+
+    return "direct_role"
+
+
+def opportunity_label(job: CanonicalJob) -> str:
+    return "Programme / internship" if classify_opportunity(job) == "programme" else "Direct role"
+
+
+def format_help_text() -> str:
+    return (
+        "🤖 VFX Job Monitor\n\n"
+        "Quick start\n"
+        "• /scan — run a fresh scan now\n"
+        "• /scandebug — scan with per-source diagnostics\n"
+        "• /jobs — top saved matches\n"
+        "• /status — current bot settings and health\n\n"
+        "How it works\n"
+        "• The bot watches VFX / animation / post-production sources\n"
+        "• It scores likely entry-level production roles\n"
+        "• Telegram alerts show the strongest matches first\n\n"
+        "Useful commands\n"
+        "• /latest — roles found in the last 24h\n"
+        "• /highpriority — strongest saved matches\n"
+        "• /search <term> — search saved jobs by title/company\n"
+        "• /showall — top stored matches in the database\n\n"
+        "Tuning\n"
+        "• /setlocation london|uk|off\n"
+        "• /quality strict|normal|off\n"
+        "• /keywords\n"
+        "• /addkeyword <phrase>\n"
+        "• /removekeyword <phrase>\n\n"
+        "Operations\n"
+        "• /sources — monitored sources\n"
+        "• /health — source health summary\n"
+        "• /dead — degraded/dead/suspect sources\n"
+        "• /pause /resume\n\n"
+        "Tip\n"
+        "Use /quality off + /scandebug when tuning coverage, then switch back to /quality normal for live alerts."
+    )
+
+
+
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
 def fetch_text(url: str) -> str:
@@ -1341,34 +1431,51 @@ def get_updates(offset=None):
 # ── Alert formatting ──────────────────────────────────────────────────────────
 
 def format_job_alert(job: CanonicalJob) -> str:
-    """Phase 1b: rich alert format with score breakdown."""
-    bd   = job.score_breakdown or {}
-    loc  = job.location_raw or job.location_normalized or "Unknown"
-    lines = [
-        f"🎯 {'HIGH PRIORITY' if (job.score or 0) >= 75 else 'New role'}",
-        f"{job.company} — {job.title}",
-        f"📍 {loc}",
-        f"⭐ Score: {int(job.score or 0)}",
-        "",
-        "Why it matched:",
+    """Telegram-friendly alert card."""
+    bd = job.score_breakdown or {}
+    loc = job.location_raw or job.location_normalized or "Unknown"
+    kind = classify_opportunity(job)
+    kind_label = opportunity_label(job)
+
+    if kind == "programme":
+        header = "🎓 Programme"
+    elif (job.score or 0) >= 75:
+        header = "🎯 HIGH PRIORITY"
+    else:
+        header = "🎯 Role"
+
+    reasons = []
+    reason_map = [
+        (bd.get("title_strength", 0), "strong title match"),
+        (bd.get("juniority", 0), "junior/entry-level signal"),
+        (bd.get("location_confidence", 0), "London/UK location"),
+        (bd.get("source_quality", 0), "direct studio source"),
+        (bd.get("ats_type", 0), "ATS-native listing"),
+        (bd.get("company_tier", 0), "preferred studio"),
     ]
-    reasons = [
-        (bd.get("title_strength", 0),    "strong title match"),
-        (bd.get("juniority", 0),         "junior/entry-level signal"),
-        (bd.get("location_confidence", 0),"London/UK location"),
-        (bd.get("source_quality", 0),    "direct studio source"),
-        (bd.get("ats_type", 0),          "ATS-native listing"),
-        (bd.get("company_tier", 0),      "preferred studio"),
-    ]
-    for pts, label in reasons:
+    for pts, label in reason_map:
         if pts > 0:
-            lines.append(f"  + {label} (+{pts})")
+            reasons.append(f"+ {label} (+{pts})")
+
     negs = bd.get("negative_indicators", 0)
     if negs < 0:
-        lines.append(f"  − negative signals ({negs})")
+        reasons.append(f"− negative signals ({negs})")
+
+    lines = [
+        header,
+        f"{job.company} — {job.title}",
+        f"Type: {kind_label}",
+        f"📍 {loc}",
+        f"⭐ Score: {int(job.score or 0)}",
+    ]
+
+    if reasons:
+        lines.extend(["", "Why it matched:"])
+        lines.extend(f"  {r}" for r in reasons[:6])
 
     if job.source_type:
-        lines.append(f"\n📡 Source: {job.source_name} ({job.ats_type or job.source_type})")
+        lines.append("")
+        lines.append(f"📡 Source: {job.source_name} ({job.ats_type or job.source_type})")
     if job.apply_url:
         lines.append(f"🔗 {job.apply_url}")
     return "\n".join(lines)
@@ -1404,20 +1511,37 @@ def send_new_job_alerts(jobs: list):
         seen.add(key)
         deduped.append(job)
 
-    high   = [j for j in deduped if (j.score or 0) >= 75]
-    normal = [j for j in deduped if quality_threshold() <= (j.score or 0) < 75]
+    deduped.sort(key=lambda j: (classify_opportunity(j) == "programme", -(j.score or 0), j.company, j.title))
+
+    high = [j for j in deduped if classify_opportunity(j) != "programme" and (j.score or 0) >= 75]
+    normal_roles = [j for j in deduped if classify_opportunity(j) != "programme" and quality_threshold() <= (j.score or 0) < 75]
+    programmes = [j for j in deduped if classify_opportunity(j) == "programme" and (j.score or 0) >= quality_threshold()]
 
     for job in high[:6]:
         send_telegram_message(format_job_alert(job))
         time.sleep(0.5)
 
-    if normal and get_state("quality_mode", "normal").lower() != "strict":
-        lines = [f"📋 {len(normal)} new matching role{'s' if len(normal) != 1 else ''}:\n"]
-        for job in normal[:6]:
+    summary_lines = []
+    if normal_roles and get_state("quality_mode", "normal").lower() != "strict":
+        summary_lines.append(f"📋 {len(normal_roles)} more role{'s' if len(normal_roles) != 1 else ''}:")
+        for job in normal_roles[:6]:
             loc = job.location_raw or job.location_normalized or ""
             loc_part = f" | {loc}" if loc else ""
-            lines.append(f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})\n{job.apply_url}\n")
-        send_telegram_message("\n".join(lines))
+            summary_lines.append(f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})")
+            summary_lines.append(f"  {job.apply_url}")
+
+    if programmes and get_state("quality_mode", "normal").lower() != "strict":
+        if summary_lines:
+            summary_lines.append("")
+        summary_lines.append(f"🎓 {len(programmes)} programme / internship signal{'s' if len(programmes) != 1 else ''}:")
+        for job in programmes[:4]:
+            loc = job.location_raw or job.location_normalized or ""
+            loc_part = f" | {loc}" if loc else ""
+            summary_lines.append(f"• {job.title} — {job.company}{loc_part} (score: {int(job.score or 0)})")
+            summary_lines.append(f"  {job.apply_url}")
+
+    if summary_lines:
+        send_telegram_message("\n".join(summary_lines))
 
 
 # ── Telegram commands ─────────────────────────────────────────────────────────
@@ -1426,22 +1550,8 @@ def handle_command(text: str) -> str:
     text  = clean_text(text)
     lower = text.lower()
 
-    if lower == "/help":
-        return (
-            "Commands:\n"
-            "/help /status\n"
-            "/showall — instantly show everything in DB matching your filters\n"
-            "/scan — fresh scrape NOW + show all matching roles\n"
-            "/scandebug — same as /scan but shows per-source detail\n"
-            "/jobs /latest /highpriority\n"
-            "/search <term>\n"
-            "/keywords /addkeyword <x> /removekeyword <x>\n"
-            "/companies /sources\n"
-            "/health /dead\n"
-            "/setlocation london|uk|off\n"
-            "/quality strict|normal|off\n"
-            "/pause /resume"
-        )
+    if lower in {"/help", "/howto", "/start"}:
+        return format_help_text()
 
     if lower == "/showall":
         rows = db_execute("""
@@ -1633,12 +1743,27 @@ def handle_command(text: str) -> str:
                 # ── Summary ──
                 errors   = sum(1 for _, _, _, e, _ in source_log if e)
                 zero_src = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
+                direct_count = sum(1 for j in all_matched if classify_opportunity(j) != "programme")
+                programme_count = sum(1 for j in all_matched if classify_opportunity(j) == "programme")
+                matched_line = (
+                    f"Matched: {len(all_matched)} total"
+                    + (
+                        f" ({direct_count} direct role{'s' if direct_count != 1 else ''}, "
+                        f"{programme_count} programme signal{'s' if programme_count != 1 else ''})"
+                        if programme_count
+                        else f" ({direct_count} direct role{'s' if direct_count != 1 else ''})"
+                    )
+                )
+                extra_hint = (
+                    f"\nThreshold was {threshold} — try /quality off then /scan to see everything"
+                    if len(all_matched) == 0 and errors < len(source_log)
+                    else ""
+                )
                 send_telegram_message(
                     f"✅ Scan complete\n"
                     f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} returned zero jobs\n"
-                    f"Matched: {len(all_matched)} role{'s' if len(all_matched) != 1 else ''} passed all filters\n"
-                    + (f"Threshold was {threshold} — try /quality off then /scan to see everything"
-                       if len(all_matched) == 0 and errors < len(source_log) else "")
+                    f"{matched_line}"
+                    f"{extra_hint}"
                 )
 
                 if not all_matched:
@@ -1660,14 +1785,19 @@ def handle_command(text: str) -> str:
 
     if lower == "/status":
         total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+        healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
+        active_sources = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+        paused = (get_state('paused', '0') == '1')
         return (
-            f"{'⏸ Paused' if get_state('paused','0')=='1' else '▶️ Running'}\n"
+            f"{'⏸ Paused' if paused else '▶️ Running'}\n"
+            f"Sources: {active_sources} active | {healthy} healthy\n"
+            f"Saved matches: {total}\n"
+            f"Location: {get_state('location_mode','london')}\n"
+            f"Quality: {get_state('quality_mode','normal')} (threshold ≥ {quality_threshold()})\n"
+            f"Interval: {CHECK_INTERVAL_SECONDS}s\n"
             f"Last checked: {get_state('last_checked','Never')}\n"
-            f"New last run: {get_state('last_match_count','0')}\n"
-            f"Active jobs: {total}\n"
-            f"Location: {get_state('location_mode','london')} | "
-            f"Quality: {get_state('quality_mode','normal')} (≥{quality_threshold()})\n"
-            f"Interval: {CHECK_INTERVAL_SECONDS}s"
+            f"New last run: {get_state('last_match_count','0')}\n\n"
+            f"Tips: /scan for a fresh run, /scandebug to inspect source-by-source results."
         )
 
     if lower == "/jobs":
