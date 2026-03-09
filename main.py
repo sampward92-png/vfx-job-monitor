@@ -116,8 +116,6 @@ NON_UK_TERMS = [
     "amsterdam", "netherlands", "sweden", "stockholm",
 ]
 
-# Domains that should never be auto-added as discovered sources
-# (job boards, aggregators, non-studio sites)
 DISCOVERY_BLOCKED_DOMAINS = {
     "entertainmentcareers.net", "indeed.com", "linkedin.com", "glassdoor.com",
     "reed.co.uk", "totaljobs.com", "cv-library.co.uk", "monster.co.uk",
@@ -126,26 +124,25 @@ DISCOVERY_BLOCKED_DOMAINS = {
 }
 
 DEFAULT_SOURCES = [
-    # Framestore Careers (html) removed - Framestore Recruitee covers all roles via API
-    {"name": "Framestore Recruitee",     "company": "Framestore",                  "kind": "studio",         "priority": 1, "type": "recruitee",  "url": "https://framestore.recruitee.com/"},
-    {"name": "DNEG Open Positions",      "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/dneg"},
-    {"name": "DNEG Jobvite",             "company": "DNEG",                        "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs"},
-    {"name": "Cinesite Job Vacancies",   "company": "Cinesite",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://cinesite.com/job-vacancies/"},
-    {"name": "Blue Zoo Careers",         "company": "Blue Zoo",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://careers.blue-zoo.co.uk/vacancies/vacancy-search-results.aspx?view=grid"},
-    {"name": "Jellyfish Workable",       "company": "Jellyfish Pictures",          "kind": "studio",         "priority": 1, "type": "workable",   "url": "https://apply.workable.com/jellyfish-pictures-ltd/"},
-    {"name": "Nexus Studios Workable",   "company": "Nexus Studios",               "kind": "studio",         "priority": 1, "type": "workable",   "url": "https://apply.workable.com/nexusstudios/"},
-    {"name": "Nexus Teamtailor",         "company": "Nexus Studios",               "kind": "studio",         "priority": 1, "type": "teamtailor", "url": "https://nexusstudios.teamtailor.com/jobs"},
-    {"name": "ILM Careers",              "company": "ILM",                         "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.ilm.com/careers/"},
-    {"name": "Milk Careers",             "company": "Milk",                        "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.milk-vfx.com/careers/"},
-    {"name": "BlueBolt Hiring",          "company": "BlueBolt",                    "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.blue-bolt.com/hiring"},
-    {"name": "Outpost Careers",          "company": "Outpost",                     "kind": "studio",         "priority": 1, "type": "greenhouse", "url": "https://careers.outpost-vfx.com/"},
-    {"name": "Coffee & TV Careers",      "company": "Coffee & TV",                 "kind": "studio",         "priority": 2, "type": "html",       "url": "https://coffeeand.tv/about/join-us/"},
-    {"name": "Envy Careers",             "company": "Envy",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.envypost.co.uk/careers"},
-    {"name": "Lola Post Careers",        "company": "Lola",                        "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.lola-post.com/careers"},
-    {"name": "ScreenSkills Jobs",        "company": "ScreenSkills",                "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.screenskills.com/jobs/"},
-    {"name": "Realtime Careers",           "company": "Realtime",                    "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.realtimeuk.com/jobs"},
-    {"name": "Untold Studios Teamtailor","company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.untoldstudios.tv/jobs"},
-    {"name": "Untold Studios Careers",   "company": "Untold Studios",              "kind": "studio",         "priority": 2, "type": "html",       "url": "https://untoldstudios.tv/careers/"},
+    {"name": "Framestore Recruitee",      "company": "Framestore",       "kind": "studio",         "priority": 1, "type": "recruitee",  "url": "https://framestore.recruitee.com/"},
+    {"name": "DNEG Open Positions",       "company": "DNEG",             "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/dneg"},
+    {"name": "DNEG Jobvite",              "company": "DNEG",             "kind": "studio",         "priority": 1, "type": "jobvite",    "url": "https://jobs.jobvite.com/double-negative-visual-effects/jobs"},
+    {"name": "Cinesite Job Vacancies",    "company": "Cinesite",         "kind": "studio",         "priority": 1, "type": "html",       "url": "https://cinesite.com/job-vacancies/"},
+    {"name": "Blue Zoo Careers",          "company": "Blue Zoo",         "kind": "studio",         "priority": 1, "type": "html",       "url": "https://careers.blue-zoo.co.uk/vacancies/vacancy-search-results.aspx?view=grid"},
+    {"name": "Jellyfish Workable",        "company": "Jellyfish Pictures","kind": "studio",         "priority": 1, "type": "workable",   "url": "https://apply.workable.com/jellyfish-pictures-ltd/"},
+    {"name": "Nexus Studios Workable",    "company": "Nexus Studios",    "kind": "studio",         "priority": 1, "type": "workable",   "url": "https://apply.workable.com/nexusstudios/"},
+    {"name": "Nexus Teamtailor",          "company": "Nexus Studios",    "kind": "studio",         "priority": 1, "type": "teamtailor", "url": "https://nexusstudios.teamtailor.com/jobs"},
+    {"name": "ILM Careers",               "company": "ILM",              "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.ilm.com/careers/"},
+    {"name": "Milk Careers",              "company": "Milk",             "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.milk-vfx.com/careers/"},
+    {"name": "BlueBolt Hiring",           "company": "BlueBolt",         "kind": "studio",         "priority": 1, "type": "html",       "url": "https://www.blue-bolt.com/hiring"},
+    {"name": "Outpost Careers",           "company": "Outpost",          "kind": "studio",         "priority": 1, "type": "greenhouse", "url": "https://careers.outpost-vfx.com/"},
+    {"name": "Coffee & TV Careers",       "company": "Coffee & TV",      "kind": "studio",         "priority": 2, "type": "html",       "url": "https://coffeeand.tv/about/join-us/"},
+    {"name": "Envy Careers",              "company": "Envy",             "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.envypost.co.uk/careers"},
+    {"name": "Lola Post Careers",         "company": "Lola",             "kind": "studio",         "priority": 2, "type": "html",       "url": "https://www.lola-post.com/careers"},
+    {"name": "ScreenSkills Jobs",         "company": "ScreenSkills",     "kind": "industry_board", "priority": 3, "type": "html",       "url": "https://www.screenskills.com/jobs/"},
+    {"name": "Realtime Careers",          "company": "Realtime",         "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.realtimeuk.com/jobs"},
+    {"name": "Untold Studios Teamtailor", "company": "Untold Studios",   "kind": "studio",         "priority": 2, "type": "teamtailor", "url": "https://careers.untoldstudios.tv/jobs"},
+    {"name": "Untold Studios Careers",    "company": "Untold Studios",   "kind": "studio",         "priority": 2, "type": "html",       "url": "https://untoldstudios.tv/careers/"},
 ]
 
 ATS_PATTERNS = {
@@ -159,7 +156,9 @@ ATS_PATTERNS = {
     "workday":         ["myworkdayjobs.com", ".wd1.myworkdayjobs.com", ".wd3.myworkdayjobs.com"],
 }
 
-_started = False
+_started   = False
+_db_lock   = threading.Lock()
+_scan_lock = threading.Lock()
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -218,7 +217,6 @@ def is_allowed_html_link(source: dict, full_url: str) -> bool:
     parsed = urlparse(full_url)
     path   = normalize_text(parsed.path or "")
 
-    # Paths that are never job listings
     blocked_exact = {
         "/contact", "/contacts", "/about", "/team", "/news", "/blog",
         "/our-work", "/work", "/services", "/projects", "/portfolio",
@@ -226,20 +224,19 @@ def is_allowed_html_link(source: dict, full_url: str) -> bool:
         "/subscribe", "/membership", "/members", "/join", "/donate",
         "/privacy", "/terms", "/cookies", "/accessibility",
         "/training", "/skills-checklists",
-        "/careers", "/jobs", "/vacancies",           # root index pages
-        "/subpages/job-vacancies",                   # index pages
+        "/careers", "/jobs", "/vacancies",
+        "/subpages/job-vacancies",
     }
     blocked_contains = [
         "/subscribe", "/membership", "/information-and-resources",
         "/skills-checklists", "/training/screenskills",
         "/applying-uk-film", "/tax-incentive", "/bfi-network",
-        "/job-vacancies",                            # generic job board index paths
+        "/job-vacancies",
     ]
     if any(path == b or path.startswith(b + "/") for b in blocked_exact):
         return False
     if any(b in path for b in blocked_contains):
         return False
-
     if identify_ats_type(full_url):
         return True
     source_host = urlparse(source["url"]).netloc.lower()
@@ -280,7 +277,6 @@ class CanonicalJob:
         parts = "|".join(normalize_text(p) for p in [company, title, location] if p)
         return hashlib.sha1(parts.encode()).hexdigest()
 
-# Signals that indicate a page is a real job listing (not a directory/index page)
 _JOB_PAGE_SIGNALS = {
     "apply", "apply now", "job description", "responsibilities", "requirements",
     "location", "salary", "contract", "full time", "part time", "full-time",
@@ -289,7 +285,6 @@ _JOB_PAGE_SIGNALS = {
     "you will", "you'll be", "closing date", "start date", "benefits",
 }
 
-# Titles that are clearly navigation/index pages, not real job titles
 _GENERIC_TITLES = {
     "careers", "jobs", "opportunities", "skills", "main navigation", "navigation",
     "careers, skills and jobs", "learn more", "browse roles", "see vacancies",
@@ -300,11 +295,6 @@ _GENERIC_TITLES = {
 }
 
 def is_real_job_page(title: str, body: str) -> bool:
-    """
-    Returns True only if the page looks like an actual job/opportunity listing.
-    Rejects navigation pages, careers landing pages, and job board index pages.
-    JSON-LD JobPosting pages bypass this check entirely (self-validating).
-    """
     low_title = title.strip().lower()
     if low_title in _GENERIC_TITLES:
         return False
@@ -312,21 +302,12 @@ def is_real_job_page(title: str, body: str) -> bool:
         "jobs", "careers", "skills", "roles", "vacancies", "opportunities", "hiring"
     }:
         return False
-    # Require at least one real job-page signal in the body
-    low_body = body.lower()
-    return any(sig in low_body for sig in _JOB_PAGE_SIGNALS)
-
+    return any(sig in body.lower() for sig in _JOB_PAGE_SIGNALS)
 
 def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
-    title    = clean_text(raw.get("title", ""))
-    # Reject generic navigation/index titles before they enter the pipeline
-    if title.strip().lower() in _GENERIC_TITLES:
-        title = ""  # Will fail keyword match downstream -- safe rejection path
-    # Reject titles that are clearly page body text, not a job title (>80 chars)
-    elif len(title) > 80:
-        title = ""  # Too long to be a real job title
-    # Reject titles that are clearly scraped body text, not a job title
-    # (real job titles are short; >120 chars is almost always a page description)
+    title = clean_text(raw.get("title", ""))
+    if title.strip().lower() in _GENERIC_TITLES or len(title) > 80:
+        title = ""
     if len(title) > 120:
         title = ""
     company  = raw.get("company", source.get("company", ""))
@@ -353,9 +334,6 @@ def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
     )
 
 # ── Database ───────────────────────────────────────────────────────────────────
-
-_db_lock  = threading.Lock()
-_scan_lock = threading.Lock()  # prevents concurrent scans
 
 def db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
@@ -566,7 +544,6 @@ def seed_defaults():
                 (s["name"], s["company"], s["kind"], s["priority"], s["type"], s["url"], now_str())
             )
         elif s["name"] in existing_sources and existing_sources[s["name"]] != s["type"]:
-            # Sync type if it changed in DEFAULT_SOURCES
             db_execute("UPDATE sources SET type=? WHERE name=?", (s["type"], s["name"]))
 
 # ── Source registry ────────────────────────────────────────────────────────────
@@ -587,9 +564,7 @@ def save_discovered_sources(parent_source: dict, discovered: list) -> int:
         candidate_url = canonicalize_url(ds.get("url", ""))
         if not candidate_url:
             continue
-        # Block job boards, aggregators, and non-studio sites from being auto-added
-        from urllib.parse import urlparse as _up
-        _domain = _up(candidate_url).netloc.lstrip("www.")
+        _domain = urlparse(candidate_url).netloc.lstrip("www.")
         if any(_domain == bd or _domain.endswith("." + bd) for bd in DISCOVERY_BLOCKED_DOMAINS):
             continue
         if db_execute("SELECT 1 FROM sources WHERE url=? LIMIT 1", (candidate_url,), fetch=True):
@@ -659,6 +634,12 @@ def format_discoveries(limit: int = 12) -> str:
 
 # ── Source health ──────────────────────────────────────────────────────────────
 
+def _compute_status(c_fails: int, c_succ: int, event_type: str) -> str:
+    if c_fails >= 7:  return "dead"
+    if c_fails >= 3:  return "degraded"
+    if event_type == "success_zero" and c_succ == 0: return "suspect"
+    return "healthy"
+
 def _upsert_health(source_name: str, now: str, success: bool, event_type: str,
                    jobs_found: int = 0, error: str = ""):
     existing = db_execute(
@@ -698,12 +679,6 @@ def _upsert_health(source_name: str, now: str, success: bool, event_type: str,
               0 if success else 1, 1 if success else 0,
               jobs_found, jobs_found, status))
         return (0 if success else 1), status
-
-def _compute_status(c_fails: int, c_succ: int, event_type: str) -> str:
-    if c_fails >= 7:  return "dead"
-    if c_fails >= 3:  return "degraded"
-    if event_type == "success_zero" and c_succ == 0: return "suspect"
-    return "healthy"
 
 def record_source_success(source_name: str, jobs_found: int):
     event_type = "success_nonzero" if jobs_found > 0 else "success_zero"
@@ -848,8 +823,7 @@ def score_job(job: CanonicalJob) -> tuple[float, dict]:
     blob    = f"{title} {body}"
     bd = {}
 
-    title_pts = max((pts for phrase, pts in TITLE_BOOSTS.items() if phrase in title), default=0)
-    bd["title_strength"] = title_pts
+    bd["title_strength"] = max((pts for phrase, pts in TITLE_BOOSTS.items() if phrase in title), default=0)
 
     juniority_terms = ["junior", "graduate", "assistant", "trainee", "intern", "entry level",
                        "no experience", "recent graduate", "entry-level", "school leaver"]
@@ -885,7 +859,6 @@ def score_job(job: CanonicalJob) -> tuple[float, dict]:
     neg_terms = ["senior", "lead", "director", "supervisor", "executive producer",
                  "principal", "recruiter", "software engineer", "technical director", " td "]
     neg = max(sum(-40 for t in neg_terms if t in blob), -100)
-    # French-language title = almost certainly non-UK office
     french_title_signals = ["coordonnateur", "coordinateur", "chef de", "directeur", "responsable"]
     if any(t in title for t in french_title_signals):
         neg = min(neg - 80, -80)
@@ -919,30 +892,21 @@ def location_allowed(job: CanonicalJob) -> bool:
         return True
     if job.source_kind == "studio" and job.company in UK_STUDIO_COMPANIES:
         return True
-    # Industry boards (ScreenSkills) are UK-only by definition
     if job.source_kind == "industry_board":
         return True
     return False
 
 def title_keyword_match(job: CanonicalJob):
-    # Excludes: title + URL — catches cases where title is generic ("View job")
-    # but the URL reveals it's an excluded programme (e.g. animation-launchpad-internship)
     title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
     if any(ex in title_hay for ex in get_excludes()):
         return False, None
 
     keywords = get_keywords()
-
-    # Primary: title match (strong signal — title must contain a keyword)
     title_only = normalize_text(job.title)
     matched = next((kw for kw in keywords if kw in title_only), None)
     if matched:
         return True, matched
 
-    # Secondary: body-only match, but ONLY for short specific keywords that are
-    # meaningful on their own (trainee, apprentice, intern, runner, graduate scheme etc.)
-    # This catches listings like "VFX Department Opportunity – we seek a trainee"
-    # but avoids false positives from "assistant" buried in boilerplate.
     BODY_ALLOWED_KEYWORDS = {
         "trainee", "apprentice", "internship", "intern", "work experience",
         "graduate scheme", "graduate programme", "graduate program",
@@ -954,7 +918,6 @@ def title_keyword_match(job: CanonicalJob):
     return (True, matched) if matched else (False, None)
 
 def classify_rejection(job: CanonicalJob, threshold: float) -> str:
-    # Uses same logic as title_keyword_match so counts stay consistent
     ok, _ = title_keyword_match(job)
     if not ok:
         title_hay = normalize_text(f"{job.title} {job.apply_url or ''}")
@@ -1152,7 +1115,6 @@ def generic_extract_jobs_from_soup(source: dict, soup) -> list:
             continue
         if low_title in nav_set or title.startswith("/") or title.startswith("http"):
             continue
-        # Reject generic page headings that aren't actual job titles
         generic_headings = {
             "jobs", "careers", "vacancies", "openings", "opportunities",
             "post production", "production", "animation", "vfx", "roles",
@@ -1188,15 +1150,13 @@ def parse_html(source: dict):
         raise RuntimeError(f"http_error:{e.response.status_code if e.response else '?'}")
 
 def enrich_from_detail_page(raw: dict, source: dict) -> dict:
-    """
-    Fetch the linked detail page and extract richer title/body text.
+    """Fetch the linked detail page and extract richer title/body text.
     Returns an enriched copy of raw, or the original if fetch fails.
     Only called for HTML sources on weak candidates (no_keyword).
     """
     url = raw.get("url", "")
     if not url or not is_allowed_html_link(source, url):
         return raw
-    # Don't re-fetch ATS pages — they have their own parsers
     if identify_ats_type(url):
         return raw
     try:
@@ -1204,7 +1164,6 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
         soup = BeautifulSoup(html, "html.parser")
         enriched = dict(raw)
 
-        # 1. JSON-LD JobPosting — most reliable signal
         jsonld_title = jsonld_body = jsonld_loc = ""
         for tag in soup.find_all("script", type="application/ld+json"):
             try:
@@ -1224,30 +1183,24 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
             except Exception:
                 pass
 
-        # 2. <title> tag (often contains role name)
         page_title = ""
         if soup.title and soup.title.string:
             page_title = clean_text(soup.title.string)
-            # Strip common site suffixes like " | Framestore Careers"
             page_title = re.sub(r"\s*[|\-–]\s*.{3,40}$", "", page_title).strip()
 
-        # 3. First <h1>, then <h2>
         h1 = clean_text(soup.find("h1").get_text(" ", strip=True)) if soup.find("h1") else ""
         h2 = clean_text(soup.find("h2").get_text(" ", strip=True)) if soup.find("h2") else ""
 
-        # 4. Meta description
         meta_desc = ""
         meta = soup.find("meta", attrs={"name": "description"})
         if meta:
             meta_desc = clean_text(meta.get("content", ""))
 
-        # 5. Top visible text block (first 1000 chars of body text)
         body_text = ""
         main = soup.find("main") or soup.find("article") or soup.find("body")
         if main:
             body_text = clean_text(main.get_text(" ", strip=True))[:1200]
 
-        # Pick the best title: JSON-LD > h1 > page_title > h2 > original
         def _title_score(t):
             if not t: return -1
             low = t.lower()
@@ -1261,7 +1214,6 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
                       (h2, "h2"), (raw.get("title", ""), "original")]
         best_title = max(candidates, key=lambda x: _title_score(x[0]))[0] or raw.get("title", "")
 
-        # Compose enriched body — prioritise JSON-LD description, fallback to body text
         enriched_body = " ".join(filter(None, [
             jsonld_body or body_text,
             meta_desc,
@@ -1269,13 +1221,11 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
             raw.get("body", ""),
         ]))[:2000]
 
-        # Only accept enrichment if page looks like a real job listing.
-        # JSON-LD JobPosting is self-validating -- only gate non-JSON-LD pages.
         if not jsonld_title and not is_real_job_page(best_title, enriched_body):
-            return raw  # Index/nav page -- discard enrichment, keep original
+            return raw
 
-        enriched["title"]    = best_title
-        enriched["body"]     = enriched_body
+        enriched["title"] = best_title
+        enriched["body"]  = enriched_body
         if jsonld_loc:
             enriched["location"] = jsonld_loc
         enriched["_enriched"] = True
@@ -1286,10 +1236,8 @@ def enrich_from_detail_page(raw: dict, source: dict) -> dict:
 
 def parse_greenhouse(source: dict):
     try:
-        # Try direct URL match first
         m = re.search(r"(?:boards|job-boards)\.greenhouse\.io/([^/?#]+)", source["url"])
         if not m:
-            # Try fetching the page and extracting the board token from HTML/JS
             html = fetch_text(source["url"])
             m = re.search(r'greenhouse\.io/([A-Za-z0-9_-]+)', html)
         if m:
@@ -1322,7 +1270,6 @@ def parse_lever(source: dict):
     return parse_html(source)
 
 def parse_workable(source: dict):
-    """Workable public JSON API: /api/v3/accounts/{slug}/jobs"""
     try:
         m = re.search(r"apply\.workable\.com/([^/?#]+)", source["url"])
         if m:
@@ -1344,24 +1291,23 @@ def parse_workable(source: dict):
     except Exception as _e:
         import logging as _log; _log.warning(f"parse_workable error: {type(_e).__name__}: {_e}")
     return parse_html(source)
+
 def parse_ashby(source):           return parse_html(source)
+
 def parse_jobvite(source: dict):
-    """Jobvite RSS feed: jobs.jobvite.com/{slug}/feed"""
     import xml.etree.ElementTree as ET
     try:
-        from urllib.parse import urlparse as _up
-        parts = _up(source["url"])
-        # Extract slug: first path segment after the host
+        parts      = urlparse(source["url"])
         path_parts = [p for p in parts.path.split("/") if p]
         if not path_parts:
             raise ValueError("no slug")
-        slug = path_parts[0]
+        slug     = path_parts[0]
         feed_url = f"https://jobs.jobvite.com/{slug}/feed"
         r = requests.get(feed_url, headers=HEADERS, timeout=15)
         r.raise_for_status()
         root = ET.fromstring(r.text)
-        ns = {"jv": "http://www.jobvite.com/ns/feed/1.0"}
-        out = []
+        ns   = {"jv": "http://www.jobvite.com/ns/feed/1.0"}
+        out  = []
         for item in root.iter("item"):
             title   = clean_text((item.findtext("title") or ""))
             link    = clean_text((item.findtext("link") or ""))
@@ -1386,17 +1332,15 @@ def parse_jobvite(source: dict):
     except Exception as _e:
         import logging as _log; _log.warning(f"parse_jobvite error: {type(_e).__name__}: {_e}")
     return parse_html(source)
+
 def parse_teamtailor(source: dict):
-    """Teamtailor public JSON endpoint: GET {subdomain}.teamtailor.com/jobs.json"""
     try:
-        from urllib.parse import urlparse as _up
-        parsed = _up(source["url"])
-        base = f"{parsed.scheme}://{parsed.netloc}"
-        data = fetch_json(f"{base}/jobs.json")
+        parsed = urlparse(source["url"])
+        base   = f"{parsed.scheme}://{parsed.netloc}"
+        data   = fetch_json(f"{base}/jobs.json")
         jobs_raw = data if isinstance(data, list) else data.get("jobs", data.get("data", []))
         out = []
         for i in jobs_raw:
-            # Teamtailor wraps fields under 'attributes' in JSON:API format, or flat
             attrs = i.get("attributes", i)
             title = clean_text(attrs.get("title", ""))
             if not title:
@@ -1421,28 +1365,26 @@ def parse_teamtailor(source: dict):
     except Exception as _e:
         import logging as _log; _log.warning(f"parse_teamtailor error: {type(_e).__name__}: {_e}")
     return parse_html(source)
+
 def parse_smartrecruiters(source): return parse_html(source)
 def parse_workday(source):         return parse_html(source)
 
 def parse_recruitee(source: dict):
-    """Recruitee public API: GET https://{slug}.recruitee.com/api/offers/"""
     try:
-        from urllib.parse import urlparse as _up
-        parsed = _up(source["url"])
-        # slug is the subdomain: framestore.recruitee.com -> framestore
+        parsed    = urlparse(source["url"])
         subdomain = parsed.netloc.split(".")[0]
-        data = fetch_json(f"https://{subdomain}.recruitee.com/api/offers/")
-        offers = data.get("offers", [])
+        data      = fetch_json(f"https://{subdomain}.recruitee.com/api/offers/")
+        offers    = data.get("offers", [])
         out = []
         for o in offers:
             title = clean_text(o.get("title", ""))
             if not title:
                 continue
-            loc   = clean_text(o.get("location", "") or o.get("city", "") or "")
-            slug  = o.get("slug", "") or str(o.get("id", ""))
-            url   = f"https://{subdomain}.recruitee.com/o/{slug}" if slug else source["url"]
-            dept  = clean_text(o.get("department", "") or "")
-            body  = clean_text(o.get("description", "") or "")[:800]
+            loc  = clean_text(o.get("location", "") or o.get("city", "") or "")
+            slug = o.get("slug", "") or str(o.get("id", ""))
+            url  = f"https://{subdomain}.recruitee.com/o/{slug}" if slug else source["url"]
+            dept = clean_text(o.get("department", "") or "")
+            body = clean_text(o.get("description", "") or "")[:800]
             out.append({
                 "title":       title,
                 "location":    loc,
@@ -1458,7 +1400,6 @@ def parse_recruitee(source: dict):
     return parse_html(source)
 
 def fetch_source_jobs(source: dict):
-    t = source["type"]
     dispatch = {
         "greenhouse": parse_greenhouse, "lever": parse_lever,
         "workable": parse_workable, "ashby": parse_ashby,
@@ -1466,7 +1407,7 @@ def fetch_source_jobs(source: dict):
         "smartrecruiters": parse_smartrecruiters, "workday": parse_workday,
         "recruitee": parse_recruitee,
     }
-    return dispatch.get(t, parse_html)(source)
+    return dispatch.get(source["type"], parse_html)(source)
 
 # ── Job storage ────────────────────────────────────────────────────────────────
 
@@ -1547,24 +1488,38 @@ def upsert_job(job: CanonicalJob) -> tuple[bool, str]:
                              notes=", ".join(sorted(changes.keys()))[:240])
     return False, unique_key
 
-# ── Core monitoring run ────────────────────────────────────────────────────────
+# ── Core scan ──────────────────────────────────────────────────────────────────
 
-def collect_and_store_jobs(force: bool = False) -> list:
-    sources      = get_active_sources()
-    threshold    = quality_threshold()
+def run_scan(silent: bool = False, debug: bool = False) -> list:
+    """
+    Scrape all active sources, store matched jobs, return new matches.
+
+    silent=True  → used by monitor_loop (no Telegram output from within scan itself)
+    silent=False → used by /scan and /scandebug (sends progress messages to Telegram)
+    debug=True   → sends per-source breakdown (implies silent=False)
+    """
+    sources   = get_active_sources()
+    threshold = quality_threshold()
+
+    if not silent:
+        send_telegram_message(
+            f"Scanning {len(sources)} sources...\n"
+            f"Location: {get_state('location_mode','london')} | Score threshold: {threshold}"
+            + ("\n[debug mode]" if debug else "")
+        )
+
     all_matched  = []
-    emitted_keys = set()
+    source_log   = []
     seen_keys    = set()
+    emitted_keys = set()
     lock         = threading.Lock()
 
     def _scrape_one(source):
         try:
             raw_jobs, discovered = fetch_source_jobs(source)
-            save_discovered_sources(source, discovered)
             record_source_success(source["name"], len(raw_jobs))
 
-            # Detail-page fallback: for HTML sources, attempt enrichment on weak candidates
-            # (those failing no_keyword) up to MAX_ENRICHMENTS per source
+            # For HTML sources, attempt enrichment on weak candidates (up to 5 per source)
             if source.get("type") == "html":
                 MAX_ENRICHMENTS = 5
                 enriched_count  = 0
@@ -1573,65 +1528,152 @@ def collect_and_store_jobs(force: bool = False) -> list:
                     if enriched_count >= MAX_ENRICHMENTS:
                         enriched_jobs.append(raw)
                         continue
-                    # Quick pre-check: only enrich if title looks weak/generic
                     title_hay = normalize_text(f"{raw.get('title','')} {raw.get('url','')}")
                     if any(ex in title_hay for ex in get_excludes()):
                         enriched_jobs.append(raw)
                         continue
-                    full_hay = normalize_text(f"{raw.get('title','')} {raw.get('body','')}")
-                    kw_match = next((kw for kw in get_keywords() if kw in full_hay), None)
+                    full_hay  = normalize_text(f"{raw.get('title','')} {raw.get('body','')}")
+                    kw_match  = next((kw for kw in get_keywords() if kw in full_hay), None)
                     if kw_match:
-                        enriched_jobs.append(raw)  # already good, no need to enrich
+                        enriched_jobs.append(raw)
                         continue
-                    # Candidate failed keyword match — try fetching its detail page
                     enriched = enrich_from_detail_page(raw, source)
                     if enriched.get("_enriched"):
                         enriched_count += 1
                     enriched_jobs.append(enriched)
                 raw_jobs = enriched_jobs
 
-            return source, raw_jobs, None
+            return source, raw_jobs, discovered, None
         except Exception as e:
-            err    = str(e)
-            etype  = "timeout" if "timeout" in err.lower() else "parse_error"
-            fails, _ = record_source_failure(source["name"], err[:200], etype)
-            if fails == 3: send_telegram_message(f"Source degraded: {source['name']}")
-            elif fails == 7: send_telegram_message(f"Source dead: {source['name']}")
-            return source, [], err
+            err   = f"{type(e).__name__}: {str(e)[:100]}"
+            fails, _ = record_source_failure(source["name"], err, "parse_error")
+            if not silent:
+                if fails == 3: send_telegram_message(f"Source degraded: {source['name']}")
+                elif fails == 7: send_telegram_message(f"Source dead: {source['name']}")
+            return source, [], [], err
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(_scrape_one, s): s for s in sources}
-        for future in concurrent.futures.as_completed(futures, timeout=60):
+        try:
+            completed_iter = concurrent.futures.as_completed(futures, timeout=120)
+        except Exception:
+            completed_iter = iter([])
+        for future in completed_iter:
             try:
-                source, raw_jobs, err = future.result()
-            except Exception:
+                source, raw_jobs, discovered, err = future.result(timeout=30)
+            except concurrent.futures.TimeoutError:
+                source = futures[future]
+                record_source_failure(source["name"], "timeout", "timeout")
+                source_log.append((source["name"], 0, 0, "timeout", {}))
                 continue
-            if err or not raw_jobs:
+            except Exception as e:
+                source = futures[future]
+                source_log.append((source["name"], 0, 0, str(e)[:120], {}))
                 continue
+
+            if err:
+                source_log.append((source["name"], 0, 0, err, {}))
+                continue
+
+            save_discovered_sources(source, discovered)
+            matched_this  = 0
+            reason_counts = {"excluded": 0, "no_keyword": 0, "location": 0, "score": 0}
+
             for raw in raw_jobs:
-                job = normalise_to_canonical(raw, source)
-                ok, matched_keyword = title_keyword_match(job)
-                if not ok: continue
+                job    = normalise_to_canonical(raw, source)
+                reason = classify_rejection(job, threshold)
+                if reason != "passed":
+                    reason_counts[reason] += 1
+                    continue
+                _, matched_keyword = title_keyword_match(job)
                 job.matched_keyword = matched_keyword
-                if not location_allowed(job): continue
                 total_score, breakdown = score_job(job)
-                job.score           = total_score
-                job.score_breakdown = breakdown
+                job.score = total_score; job.score_breakdown = breakdown
                 blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
                 job.location_normalized = detect_location(blob, company=job.company) or None
-                if job.location_normalized == "Non-UK" or total_score <= 0:
-                    continue
-                if total_score < threshold:
-                    continue
                 with lock:
                     created, unique_key = upsert_job(job)
                     seen_keys.add(unique_key)
-                    if (created or force) and unique_key not in emitted_keys:
+                    if unique_key not in emitted_keys:
                         emitted_keys.add(unique_key)
-                        all_matched.append(job)
+                        if created or debug:
+                            all_matched.append(job)
+                matched_this += 1
+            source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
+
+        for future, source in futures.items():
+            if not future.done():
+                record_source_failure(source["name"], "timeout", "timeout")
+                source_log.append((source["name"], 0, 0, "timeout", {}))
 
     expire_stale_jobs(seen_keys)
-    return sorted(all_matched, key=lambda j: j.score or 0, reverse=True)
+    all_matched.sort(key=lambda j: j.score or 0, reverse=True)
+
+    if not silent:
+        if debug:
+            lines = ["📊 Per-source results:"]
+            for name, raw_c, match_c, err, reason_counts in source_log:
+                if err:
+                    lines.append(f"  ❌ {name}: {err}")
+                elif raw_c == 0:
+                    lines.append(f"  🟡 {name}: 0 jobs found")
+                elif match_c == 0:
+                    rsummary = ", ".join(f"{k}={v}" for k, v in (reason_counts or {}).items() if v > 0)
+                    lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed" + (f" ({rsummary})" if rsummary else ""))
+                else:
+                    lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
+            chunk, chunks = [], []
+            for line in lines:
+                chunk.append(line)
+                if len("\n".join(chunk)) > 3500:
+                    chunks.append("\n".join(chunk)); chunk = []
+            if chunk: chunks.append("\n".join(chunk))
+            for c in chunks:
+                send_telegram_message(c); time.sleep(0.3)
+
+        errors       = sum(1 for _, _, _, e, _ in source_log if e)
+        zero_src     = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
+        direct_count = sum(1 for j in all_matched if classify_opportunity(j) != "programme")
+        prog_count   = sum(1 for j in all_matched if classify_opportunity(j) == "programme")
+        matched_line = (
+            f"Matched: {len(all_matched)} total"
+            + (f" ({direct_count} direct, {prog_count} programme)" if prog_count
+               else f" ({direct_count} direct role{'s' if direct_count!=1 else ''})")
+        )
+        hint = (
+            f"\nThreshold was {threshold} -- try /quality off then /scan to see everything"
+            if not all_matched and errors < len(source_log) else ""
+        )
+        send_telegram_message(
+            f"✅ Scan complete\n"
+            f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} zero jobs\n"
+            f"{matched_line}{hint}"
+        )
+
+        if all_matched:
+            seen_alert, deduped = set(), []
+            for job in all_matched:
+                key = build_unique_key(job)
+                if key not in seen_alert: seen_alert.add(key); deduped.append(job)
+
+            direct_roles    = [j for j in deduped if classify_opportunity(j) != "programme"]
+            programme_roles = [j for j in deduped if classify_opportunity(j) == "programme"]
+
+            if direct_roles:
+                send_telegram_message(f"Top direct roles ({min(len(direct_roles),10)} shown):")
+                for job in direct_roles[:10]:
+                    send_job_alert(job); time.sleep(0.5)
+                if len(direct_roles) > 10:
+                    send_telegram_message(f"...and {len(direct_roles)-10} more. Use /jobs to see all.")
+
+            if programme_roles:
+                send_telegram_message(f"Programme signals ({min(len(programme_roles),5)} shown):")
+                for job in programme_roles[:5]:
+                    send_job_alert(job); time.sleep(0.5)
+                if len(programme_roles) > 5:
+                    send_telegram_message(f"...and {len(programme_roles)-5} more. Use /jobs to see all.")
+
+    return all_matched
 
 # ── Telegram ───────────────────────────────────────────────────────────────────
 
@@ -1649,17 +1691,13 @@ def send_telegram_message(text, chat_id=None, buttons=None):
             payload["reply_markup"] = {"inline_keyboard": buttons}
         resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json=payload,
-            timeout=20,
+            json=payload, timeout=20,
         )
-        # Telegram returns 400 when inline button URLs are malformed.
-        # Retry without buttons so the message still delivers.
         if not resp.ok and buttons:
             payload.pop("reply_markup", None)
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                json=payload,
-                timeout=20,
+                json=payload, timeout=20,
             )
     except Exception:
         pass
@@ -1668,8 +1706,7 @@ def answer_callback(callback_id: str):
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
-            json={"callback_query_id": callback_id},
-            timeout=10,
+            json={"callback_query_id": callback_id}, timeout=10,
         )
     except Exception:
         pass
@@ -1684,11 +1721,7 @@ def main_menu_buttons():
     ]
 
 def send_menu(chat_id=None):
-    send_telegram_message(
-        "📋 What would you like to do?",
-        chat_id=chat_id,
-        buttons=main_menu_buttons(),
-    )
+    send_telegram_message("📋 What would you like to do?", chat_id=chat_id, buttons=main_menu_buttons())
 
 def telegram_api(method, payload=None):
     r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}",
@@ -1738,10 +1771,9 @@ def format_job_alert(job: CanonicalJob) -> str:
     return "\n".join(lines)
 
 def send_job_alert(job: CanonicalJob, chat_id=None):
-    text = format_job_alert(job)
+    text    = format_job_alert(job)
     buttons = None
-    url = (job.apply_url or "").strip()
-    # Telegram URL buttons require absolute http/https -- skip if relative or missing
+    url     = (job.apply_url or "").strip()
     if url.startswith(("http://", "https://")):
         unique_key = build_unique_key(job)
         buttons = [
@@ -1762,7 +1794,7 @@ def format_job_rows(rows) -> str:
         )
     lines = ["🗂️ Saved jobs"]
     for idx, (title, company, loc, url, first_seen, score) in enumerate(rows[:10], 1):
-        loc_text = prettify_location(loc) if loc else None
+        loc_text  = prettify_location(loc) if loc else None
         kind_icon = "🎓" if any(t in title.lower() for t in ["intern", "trainee", "scheme", "programme", "program", "launchpad", "work experience"]) else "🎯"
         lines.append(f"\n{idx}. {kind_icon} {title}")
         lines.append(f"   🏢 {company}")
@@ -1813,351 +1845,158 @@ def send_new_job_alerts(jobs: list):
 
     if summary: send_telegram_message("\n".join(summary))
 
-# ── Telegram commands ──────────────────────────────────────────────────────────
+# ── Telegram command handlers ──────────────────────────────────────────────────
+
+def _cmd_showall() -> str:
+    rows = db_execute(
+        """SELECT title, company, location_raw, apply_url, first_seen, score,
+                  score_breakdown_json, matched_keyword, source_name, ats_type
+           FROM jobs WHERE job_status='active' AND (location_normalized IS NULL OR location_normalized != 'Non-UK')
+           ORDER BY score DESC, id DESC LIMIT 30""",
+        fetch=True,
+    )
+    if not rows:
+        return "No active jobs yet. Use /scan to trigger a fresh scrape."
+    total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    send_telegram_message(f"Stored matches ({total} total, showing top {min(len(rows),30)} by score)")
+    time.sleep(0.3)
+    for row in rows[:30]:
+        title, company, loc, url, first_seen, score, bd_json, keyword, source_name, ats_type = row
+        bd = {}
+        try: bd = json.loads(bd_json or "{}")
+        except Exception: pass
+        reasons = [f"+{bd.get(k,0)} {lbl}" for k, lbl in [
+            ("title_strength", "title"), ("juniority", "junior signal"),
+            ("location_confidence", "location"), ("source_quality", "studio source"),
+        ] if bd.get(k, 0) > 0]
+        lines = [f"Score: {int(score or 0)} -- {title}", f"{company}"]
+        if loc:     lines.append(f"Location: {loc}")
+        if keyword: lines.append(f"Matched: {keyword}")
+        if reasons: lines.append("Why: " + " | ".join(reasons))
+        lines += [f"First seen: {first_seen}", f"Source: {source_name}" + (f" ({ats_type})" if ats_type else "")]
+        if url: lines.append(url)
+        send_telegram_message("\n".join(lines))
+        time.sleep(0.4)
+    if total > 30:
+        send_telegram_message(f"...and {total-30} more. Use /search <company> to filter.")
+    return ""
+
+def _cmd_events() -> str:
+    rows = db_execute(
+        """SELECT event_type, event_at, source_name, old_value_json, new_value_json, notes
+           FROM job_events ORDER BY id DESC LIMIT 12""",
+        fetch=True,
+    )
+    if not rows: return "🕘 No job changes recorded yet."
+    icon  = {"created": "NEW", "updated": "UPD", "reopened": "REOPEN", "expired": "EXP"}
+    lines = ["Recent activity"]
+    for etype, eat, sname, old_json, new_json, notes in rows:
+        snap    = (json.loads(new_json) if new_json else {}) or (json.loads(old_json) if old_json else {})
+        title   = snap.get("title", "Unknown")
+        company = snap.get("company", "Unknown")
+        lines.append(f"{icon.get(etype,'?')} {etype.title()} -- {company} -- {title}")
+        lines.append(f"  {eat} | {sname or snap.get('source_name','')}")
+        if notes: lines.append(f"  {notes}")
+    return "\n".join(lines[:40])
+
+def _cmd_status() -> str:
+    total   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
+    n_src   = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+    paused  = get_state("paused", "0") == "1"
+    mode    = get_state("location_mode", "london")
+    quality = get_state("quality_mode", "off")
+    return (
+        f"🎬 VFX Job Monitor\n\n"
+        f"{'⏸️ Paused' if paused else '▶️ Running'}\n\n"
+        f"🛰️ Sources: {n_src} active, {healthy} healthy\n"
+        f"🗂️ Active matches: {total}\n"
+        f"✨ Matches found last run: {get_state('last_match_count', '0')}\n\n"
+        f"📍 Location: {mode}\n"
+        f"🎚️ Quality: {quality}\n"
+        f"Score threshold: {quality_threshold()}\n"
+        f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
+        f"🕘 Last checked: {get_state('last_checked', 'Never')}\n\n"
+        f"🚀 /scan -- run a fresh scan now\n"
+        f"🗂️ /jobs -- browse saved jobs\n"
+        f"🧪 /scandebug -- per-source detail (for testing)"
+    )
+
+def _cmd_coverage() -> str:
+    rows = db_execute(
+        """SELECT sh.source_name, sh.jobs_found_last, sh.jobs_found_total,
+                  sh.last_success_at, sh.status, sh.last_event_type, s.company
+           FROM source_health sh
+           LEFT JOIN sources s ON s.name = sh.source_name
+           ORDER BY sh.jobs_found_total DESC""",
+        fetch=True,
+    ) or []
+    total_active = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+
+    def friendly_status(status, last_event):
+        if status == "healthy" and last_event == "success_nonzero": return "Working normally"
+        if status == "healthy" and last_event == "success_zero":    return "No jobs found recently"
+        if status == "suspect":                                      return "No jobs found recently"
+        if status == "degraded":                                     return "Needs attention"
+        if status == "dead":                                         return "Not responding"
+        return "No jobs found recently"
+
+    producing, quiet, broken = [], [], []
+    for r in rows:
+        name, last, total, last_ok, status, evt, company = r
+        label = company or name
+        fs    = friendly_status(status, evt)
+        if status in ("dead", "degraded"):
+            broken.append((label, fs))
+        elif (last or 0) > 0:
+            producing.append((label, last or 0, total or 0, last_ok))
+        else:
+            quiet.append((label, fs))
+
+    lines = [f"📡 Coverage report\n{total_active} studios monitored\n"]
+    if producing:
+        lines.append("Producing results:")
+        for company, last, total, last_ok in producing[:12]:
+            lines.append(f"  ✅ {company} -- {last} found last scan ({total} total)")
+    if quiet:
+        lines.append("\nNo listings found (may be JS-rendered or currently quiet):")
+        for company, fs in quiet[:10]:
+            lines.append(f"  🟡 {company} -- {fs}")
+    if broken:
+        lines.append("\nNot responding (URL may have changed):")
+        for company, fs in broken:
+            lines.append(f"  ❌ {company} -- {fs}")
+    return "\n".join(lines)
+
+def _cmd_dead() -> str:
+    rows = db_execute(
+        """SELECT source_name, consecutive_fails, last_event_type, last_error, last_success_at
+           FROM source_health WHERE status IN ('dead','degraded','suspect')
+           ORDER BY consecutive_fails DESC""",
+        fetch=True,
+    )
+    if not rows: return "No degraded or dead sources."
+    lines = []
+    for name, fails, evt, error, last_ok in rows:
+        status_lbl = "DEAD" if fails >= 7 else ("ZERO" if evt == "success_zero" else "WARN")
+        lines.append(f"{status_lbl} {name}\n  Fails: {fails} | {evt or '?'} | Last OK: {last_ok or 'never'}\n  {(error or '')[:100]}")
+    return "\n\n".join(lines)
 
 def handle_command(text: str) -> str:
     text  = clean_text(text)
     lower = text.lower()
 
+    # ── Help / info ──
     if lower in {"/help", "/howto", "/start"}:
         return format_help_text()
 
-    if lower == "/discoveries":
-        return format_discoveries()
-
-    if lower.startswith("/approve_source "):
-        raw_id = clean_text(text[len("/approve_source "):])
-        if not raw_id.isdigit(): return "Use: /approve_source <id>"
-        ok, msg = approve_discovery(int(raw_id))
-        return ("OK: " + msg) if ok else ("Error: " + msg)
-
-    if lower.startswith("/reject_source "):
-        raw_id = clean_text(text[len("/reject_source "):])
-        if not raw_id.isdigit(): return "Use: /reject_source <id>"
-        ok, msg = reject_discovery(int(raw_id))
-        return ("OK: " + msg) if ok else ("Error: " + msg)
-
-    if lower == "/showall":
-        rows = db_execute(
-            """SELECT title, company, location_raw, apply_url, first_seen, score,
-                      score_breakdown_json, matched_keyword, source_name, ats_type
-               FROM jobs WHERE job_status='active' AND (location_normalized IS NULL OR location_normalized != 'Non-UK') ORDER BY score DESC, id DESC LIMIT 30""",
-            fetch=True,
-        )
-        if not rows:
-            return "No active jobs yet. Use /scan to trigger a fresh scrape."
-        total = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-        send_telegram_message(f"Stored matches ({total} total, showing top {min(len(rows),30)} by score)")
-        time.sleep(0.3)
-        for row in rows[:30]:
-            title, company, loc, url, first_seen, score, bd_json, keyword, source_name, ats_type = row
-            bd = {}
-            try: bd = json.loads(bd_json or "{}")
-            except Exception: pass
-            reasons = [f"+{bd.get(k,0)} {lbl}" for k, lbl in [
-                ("title_strength", "title"), ("juniority", "junior signal"),
-                ("location_confidence", "location"), ("source_quality", "studio source"),
-            ] if bd.get(k, 0) > 0]
-            lines = [f"Score: {int(score or 0)} -- {title}", f"{company}"]
-            if loc:     lines.append(f"Location: {loc}")
-            if keyword: lines.append(f"Matched: {keyword}")
-            if reasons: lines.append("Why: " + " | ".join(reasons))
-            lines += [f"First seen: {first_seen}", f"Source: {source_name}" + (f" ({ats_type})" if ats_type else "")]
-            if url: lines.append(url)
-            send_telegram_message("\n".join(lines))
-            time.sleep(0.4)
-        if total > 30:
-            send_telegram_message(f"...and {total-30} more. Use /search <company> to filter.")
-        return ""
-
-    if lower == "/reseed":
-        # Re-run seed_defaults to push any new keywords/excludes to DB
-        seed_defaults()
-        kw_count = len(get_keywords())
-        ex_count = len(get_excludes())
-        return f"Reseeded. Keywords: {kw_count}, Excludes: {ex_count}"
-
-    if lower == "/fixsources":
-        # Force-sync source types from DEFAULT_SOURCES to DB
-        fixed = []
-        for s in DEFAULT_SOURCES:
-            rows = db_execute("SELECT type FROM sources WHERE name=?", (s["name"],), fetch=True)
-            if rows and rows[0][0] != s["type"]:
-                db_execute("UPDATE sources SET type=? WHERE name=?", (s["type"], s["name"]))
-                fixed.append(f"{s['name']}: {rows[0][0]} -> {s['type']}")
-        if fixed:
-            return "Fixed source types:\n" + "\n".join(fixed)
-        return "All source types already up to date."
-
-    if lower == "/diag":
-        def _diag():
-            import traceback as _tb
-            results = []
-            # Test 1: basic outbound HTTP
-            try:
-                r = requests.get("https://httpbin.org/get", headers=HEADERS, timeout=10)
-                results.append(f"httpbin: {r.status_code}, {len(r.text)} chars")
-            except Exception as e:
-                results.append(f"httpbin FAIL: {type(e).__name__}: {e}")
-            # Test 2: fetch a known Workable API
-            try:
-                r = requests.post(
-                    "https://apply.workable.com/api/v3/accounts/nexusstudios/jobs",
-                    headers={**HEADERS, "Content-Type": "application/json"},
-                    json={"query":"","location":[],"department":[],"worktype":[],"remote":[]},
-                    timeout=10
-                )
-                data = r.json()
-                count = len(data.get("results", []))
-                results.append(f"Workable API: {r.status_code}, {count} jobs")
-            except Exception as e:
-                results.append(f"Workable FAIL: {type(e).__name__}: {str(e)[:80]}")
-            # Test 3: fetch Framestore HTML, report first 200 chars
-            try:
-                r = requests.get("https://www.framestore.com/careers", headers=HEADERS, timeout=10)
-                snippet = r.text[:200].replace("\n"," ")
-                results.append(f"Framestore HTML: {r.status_code}, starts: {snippet!r:.120}")
-            except Exception as e:
-                results.append(f"Framestore FAIL: {type(e).__name__}: {str(e)[:80]}")
-            # Test 4: check keywords table
-            try:
-                kws = get_keywords()
-                results.append(f"Keywords in DB: {len(kws)}, sample: {kws[:3]}")
-            except Exception as e:
-                results.append(f"Keywords FAIL: {e}")
-            # Test 5: simulate matching on a known title
-            try:
-                test_title = "production coordinator"
-                kws = get_keywords()
-                matched = next((k for k in kws if k in test_title), None)
-                results.append(f"Match test 'production coordinator': {matched!r}")
-            except Exception as e:
-                results.append(f"Match test FAIL: {e}")
-            # Test 6: fetch Framestore Recruitee via API and show raw job titles
-            try:
-                src = next(s for s in get_active_sources() if "Framestore Recruitee" in s["name"])
-                raw_jobs, _ = fetch_source_jobs(src)
-                titles = [j.get("title","?") for j in raw_jobs[:6]]
-                results.append(f"Framestore Recruitee ({len(raw_jobs)} jobs): {titles}")
-            except Exception as e:
-                results.append(f"Framestore Recruitee FAIL: {e}")
-            # Test 7: Jobvite RSS feed for DNEG
-            try:
-                src = next(s for s in get_active_sources() if s["name"] == "DNEG Jobvite")
-                raw_jobs, _ = fetch_source_jobs(src)
-                titles = [j.get("title","?") for j in raw_jobs[:4]]
-                results.append(f"DNEG Jobvite ({len(raw_jobs)} jobs): {titles}")
-            except Exception as e:
-                results.append(f"DNEG Jobvite FAIL: {e}")
-            send_telegram_message("🔬 Diagnostics:\n" + "\n".join(results))
-        threading.Thread(target=_diag, daemon=True).start()
-        return "Running diagnostics..."
-
-    if lower in {"/scan", "/scandebug"}:
-        debug = (lower == "/scandebug")
-
-        def _run_scan():
-            if not _scan_lock.acquire(blocking=False):
-                send_telegram_message("⏳ A scan is already running — please wait.")
-                return
-            try:
-                sources   = get_active_sources()
-                threshold = quality_threshold()
-                send_telegram_message(
-                    f"Scanning {len(sources)} sources...\n"
-                    f"Location: {get_state('location_mode','london')} | Score threshold: {threshold}"
-                    + ("\n[debug mode]" if debug else "")
-                )
-
-                all_matched  = []
-                source_log   = []
-                seen_keys    = set()
-                emitted_keys = set()
-                lock         = threading.Lock()
-
-                def _scrape_one(source):
-                    try:
-                        raw_jobs, discovered = fetch_source_jobs(source)
-                        record_source_success(source["name"], len(raw_jobs))
-                        return source, raw_jobs, discovered, None
-                    except Exception as e:
-                        import traceback as _tb
-                        err = f"{type(e).__name__}: {str(e)[:100]}"
-                        record_source_failure(source["name"], err, "parse_error")
-                        return source, [], [], err
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = {executor.submit(_scrape_one, s): s for s in sources}
-                    try:
-                        completed_iter = concurrent.futures.as_completed(futures, timeout=120)
-                    except Exception:
-                        completed_iter = iter([])
-                    for future in completed_iter:
-                        try:
-                            source, raw_jobs, discovered, err = future.result(timeout=30)
-                        except concurrent.futures.TimeoutError:
-                            source = futures[future]
-                            record_source_failure(source["name"], "timeout", "timeout")
-                            source_log.append((source["name"], 0, 0, "timeout", {}))
-                            continue
-                        except Exception as e:
-                            source = futures[future]
-                            source_log.append((source["name"], 0, 0, str(e)[:120], {}))
-                            continue
-
-                        if err:
-                            source_log.append((source["name"], 0, 0, err, {}))
-                            continue
-
-                        save_discovered_sources(source, discovered)
-                        matched_this  = 0
-                        reason_counts = {"excluded": 0, "no_keyword": 0, "location": 0, "score": 0}
-
-                        for raw in raw_jobs:
-                            job    = normalise_to_canonical(raw, source)
-                            reason = classify_rejection(job, threshold)
-                            if reason != "passed":
-                                reason_counts[reason] += 1
-                                continue
-                            _, matched_keyword = title_keyword_match(job)
-                            job.matched_keyword = matched_keyword
-                            total_score, breakdown = score_job(job)
-                            job.score = total_score; job.score_breakdown = breakdown
-                            blob = " ".join(filter(None, [job.title, job.location_raw, job.description_text]))
-                            job.location_normalized = detect_location(blob, company=job.company) or None
-                            with lock:
-                                created, unique_key = upsert_job(job)
-                                seen_keys.add(unique_key)
-                                if unique_key not in emitted_keys:
-                                    emitted_keys.add(unique_key)
-                                    if created or debug:
-                                        all_matched.append(job)
-                            matched_this += 1
-                        source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
-
-                    # Any futures not yet completed (outer timeout) → mark as timeout
-                    for future, source in futures.items():
-                        if not future.done():
-                            record_source_failure(source["name"], "timeout", "timeout")
-                            source_log.append((source["name"], 0, 0, "timeout", {}))
-
-                expire_stale_jobs(seen_keys)
-                all_matched.sort(key=lambda j: j.score or 0, reverse=True)
-
-                if debug:
-                    lines = ["📊 Per-source results:"]
-                    for name, raw_c, match_c, err, reason_counts in source_log:
-                        if err:
-                            lines.append(f"  ❌ {name}: {err}")
-                        elif raw_c == 0:
-                            lines.append(f"  🟡 {name}: 0 jobs found")
-                        elif match_c == 0:
-                            rsummary = ", ".join(f"{k}={v}" for k, v in (reason_counts or {}).items() if v > 0)
-                            lines.append(f"  ⚪ {name}: {raw_c} found, 0 passed" + (f" ({rsummary})" if rsummary else ""))
-                        else:
-                            lines.append(f"  ✅ {name}: {raw_c} found, {match_c} matched")
-                    chunk, chunks = [], []
-                    for line in lines:
-                        chunk.append(line)
-                        if len("\n".join(chunk)) > 3500:
-                            chunks.append("\n".join(chunk)); chunk = []
-                    if chunk: chunks.append("\n".join(chunk))
-                    for c in chunks:
-                        send_telegram_message(c); time.sleep(0.3)
-
-                errors        = sum(1 for _, _, _, e, _ in source_log if e)
-                zero_src      = sum(1 for _, r, _, e, _ in source_log if r == 0 and not e)
-                direct_count  = sum(1 for j in all_matched if classify_opportunity(j) != "programme")
-                prog_count    = sum(1 for j in all_matched if classify_opportunity(j) == "programme")
-                matched_line  = (
-                    f"Matched: {len(all_matched)} total"
-                    + (f" ({direct_count} direct, {prog_count} programme)" if prog_count
-                       else f" ({direct_count} direct role{'s' if direct_count!=1 else ''})")
-                )
-                hint = (
-                    f"\nThreshold was {threshold} -- try /quality off then /scan to see everything"
-                    if not all_matched and errors < len(source_log) else ""
-                )
-                send_telegram_message(
-                    f"✅ Scan complete\n"
-                    f"Sources: {len(source_log)} checked, {errors} errors, {zero_src} zero jobs\n"
-                    f"{matched_line}{hint}"
-                )
-
-                if not all_matched: return
-
-                seen_alert, deduped = set(), []
-                for job in all_matched:
-                    key = build_unique_key(job)
-                    if key not in seen_alert: seen_alert.add(key); deduped.append(job)
-
-                direct_roles    = [j for j in deduped if classify_opportunity(j) != "programme"]
-                programme_roles = [j for j in deduped if classify_opportunity(j) == "programme"]
-
-                if direct_roles:
-                    send_telegram_message(f"Top direct roles ({min(len(direct_roles),10)} shown):")
-                    for job in direct_roles[:10]:
-                        send_job_alert(job); time.sleep(0.5)
-                    if len(direct_roles) > 10:
-                        send_telegram_message(f"...and {len(direct_roles)-10} more. Use /jobs to see all.")
-
-                if programme_roles:
-                    send_telegram_message(f"Programme signals ({min(len(programme_roles),5)} shown):")
-                    for job in programme_roles[:5]:
-                        send_job_alert(job); time.sleep(0.5)
-                    if len(programme_roles) > 5:
-                        send_telegram_message(f"...and {len(programme_roles)-5} more. Use /jobs to see all.")
-
-            except Exception as e:
-                import traceback
-                send_telegram_message(f"Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
-            finally:
-                _scan_lock.release()
-
-        threading.Thread(target=_run_scan, daemon=True).start()
-        return "Scan started -- results on the way."
+    if lower == "/status":
+        return _cmd_status()
 
     if lower == "/events":
-        rows = db_execute(
-            """SELECT event_type, event_at, source_name, old_value_json, new_value_json, notes
-               FROM job_events ORDER BY id DESC LIMIT 12""",
-            fetch=True,
-        )
-        if not rows: return "🕘 No job changes recorded yet."
-        icon = {"created": "NEW", "updated": "UPD", "reopened": "REOPEN", "expired": "EXP"}
-        lines = ["Recent activity"]
-        for etype, eat, sname, old_json, new_json, notes in rows:
-            snap    = (json.loads(new_json) if new_json else {}) or (json.loads(old_json) if old_json else {})
-            title   = snap.get("title", "Unknown")
-            company = snap.get("company", "Unknown")
-            lines.append(f"{icon.get(etype,'?')} {etype.title()} -- {company} -- {title}")
-            lines.append(f"  {eat} | {sname or snap.get('source_name','')}")
-            if notes: lines.append(f"  {notes}")
-        return "\n".join(lines[:40])
+        return _cmd_events()
 
-    if lower == "/status":
-        total   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-        healthy = (db_execute("SELECT COUNT(*) FROM source_health WHERE status='healthy'", fetch=True) or [[0]])[0][0]
-        n_src   = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
-        paused  = get_state("paused", "0") == "1"
-        mode    = get_state("location_mode", "london")
-        quality = get_state("quality_mode", "off")
-        return (
-            f"🎬 VFX Job Monitor\n\n"
-            f"{'⏸️ Paused' if paused else '▶️ Running'}\n\n"
-            f"🛰️ Sources: {n_src} active, {healthy} healthy\n"
-            f"🗂️ Active matches: {total}\n"
-            f"✨ Matches found last run: {get_state('last_match_count', '0')}\n\n"
-            f"📍 Location: {mode}\n"
-            f"🎚️ Quality: {quality}\n"
-            f"Score threshold: {quality_threshold()}\n"
-            f"⏱️ Scan interval: {CHECK_INTERVAL_SECONDS}s\n"
-            f"🕘 Last checked: {get_state('last_checked', 'Never')}\n\n"
-            f"🚀 /scan -- run a fresh scan now\n"
-            f"🗂️ /jobs -- browse saved jobs\n"
-            f"🧪 /scandebug -- per-source detail (for testing)"
-        )
-
+    # ── Job browsing ──
     if lower == "/jobs":
         rows = db_execute(
             """SELECT title, company, location_raw, apply_url, first_seen, score
@@ -2187,6 +2026,10 @@ def handle_command(text: str) -> str:
         )
         return format_job_rows(rows) if rows else f'No active jobs for "{term}".'
 
+    if lower == "/showall":
+        return _cmd_showall()
+
+    # ── Keywords / settings ──
     if lower == "/keywords":
         return "Keywords\n" + "\n".join(f"- {k}" for k in get_keywords())
 
@@ -2197,93 +2040,6 @@ def handle_command(text: str) -> str:
     if lower.startswith("/removekeyword "):
         kw = text[len("/removekeyword "):].strip()
         remove_keyword(kw); return f'Removed: "{normalize_text(kw)}"'
-
-    if lower == "/companies":
-        rows = db_execute(
-            "SELECT company, COUNT(*) FROM jobs WHERE job_status='active' GROUP BY company ORDER BY COUNT(*) DESC",
-            fetch=True,
-        )
-        return ("Companies:\n" + "\n".join(f"- {c} ({n})" for c, n in rows)) if rows else "No active jobs yet."
-
-    if lower == "/sources":
-        rows = db_execute("SELECT name, company, type, kind, active FROM sources ORDER BY priority", fetch=True)
-        return ("Sources:\n" + "\n".join(f"{'ON' if r[4] else 'OFF'} {r[1]} | {r[2]} | {r[3]}" for r in (rows or []))) or "No sources."
-
-    if lower == "/health":
-        rows = db_execute("SELECT status, COUNT(*) FROM source_health GROUP BY status", fetch=True)
-        if not rows: return "No health data yet. Run /scan first."
-        n = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
-        return f"Source health ({n} active):\n" + "\n".join(f"  {s}: {c}" for s, c in rows)
-
-    if lower == "/dead":
-        rows = db_execute(
-            """SELECT source_name, consecutive_fails, last_event_type, last_error, last_success_at
-               FROM source_health WHERE status IN ('dead','degraded','suspect')
-               ORDER BY consecutive_fails DESC""",
-            fetch=True,
-        )
-        if not rows: return "No degraded or dead sources."
-        lines = []
-        for name, fails, evt, error, last_ok in rows:
-            status_lbl = "DEAD" if fails >= 7 else ("ZERO" if evt == "success_zero" else "WARN")
-            lines.append(f"{status_lbl} {name}\n  Fails: {fails} | {evt or '?'} | Last OK: {last_ok or 'never'}\n  {(error or '')[:100]}")
-        return "\n\n".join(lines)
-
-    if lower == "/weekly":
-        threading.Thread(target=send_weekly_digest, daemon=True).start()
-        return "📊 Sending weekly digest..."
-
-    if lower == "/coverage":
-        rows = db_execute(
-            """SELECT sh.source_name, sh.jobs_found_last, sh.jobs_found_total,
-                      sh.last_success_at, sh.status, sh.last_event_type, s.company
-               FROM source_health sh
-               LEFT JOIN sources s ON s.name = sh.source_name
-               ORDER BY sh.jobs_found_total DESC""",
-            fetch=True,
-        ) or []
-        active       = db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]]
-        total_active = active[0][0]
-
-        def friendly_status(status, last_event, fails_implied=False):
-            if status == "healthy" and last_event == "success_nonzero": return "Working normally"
-            if status == "healthy" and last_event == "success_zero":    return "No jobs found recently"
-            if status == "suspect":                                      return "No jobs found recently"
-            if status == "degraded":                                     return "Needs attention"
-            if status == "dead":                                         return "Not responding"
-            if status == "unknown":                                      return "Not checked yet"
-            return "No jobs found recently"
-
-        producing, quiet, broken = [], [], []
-        for r in rows:
-            name, last, total, last_ok, status, evt, company = r
-            label = company or name
-            fs    = friendly_status(status, evt)
-            if status in ("dead", "degraded"):
-                broken.append((label, fs))
-            elif (last or 0) > 0:
-                producing.append((label, last or 0, total or 0, last_ok))
-            else:
-                quiet.append((label, fs))
-
-        lines = [f"📡 Coverage report\n{total_active} studios monitored\n"]
-
-        if producing:
-            lines.append("Producing results:")
-            for company, last, total, last_ok in producing[:12]:
-                lines.append(f"  ✅ {company} -- {last} found last scan ({total} total)")
-
-        if quiet:
-            lines.append("\nNo listings found (may be JS-rendered or currently quiet):")
-            for company, fs in quiet[:10]:
-                lines.append(f"  🟡 {company} -- {fs}")
-
-        if broken:
-            lines.append("\nNot responding (URL may have changed):")
-            for company, fs in broken:
-                lines.append(f"  ❌ {company} -- {fs}")
-
-        return "\n".join(lines)
 
     if lower.startswith("/setlocation "):
         mode = lower[len("/setlocation "):].strip()
@@ -2301,31 +2057,101 @@ def handle_command(text: str) -> str:
     if lower == "/resume":
         set_state("paused", "0"); return "Monitoring resumed."
 
+    # ── Sources ──
+    if lower == "/sources":
+        rows = db_execute("SELECT name, company, type, kind, active FROM sources ORDER BY priority", fetch=True)
+        return ("Sources:\n" + "\n".join(f"{'ON' if r[4] else 'OFF'} {r[1]} | {r[2]} | {r[3]}" for r in (rows or []))) or "No sources."
+
+    if lower == "/companies":
+        rows = db_execute(
+            "SELECT company, COUNT(*) FROM jobs WHERE job_status='active' GROUP BY company ORDER BY COUNT(*) DESC",
+            fetch=True,
+        )
+        return ("Companies:\n" + "\n".join(f"- {c} ({n})" for c, n in rows)) if rows else "No active jobs yet."
+
+    if lower == "/coverage":
+        return _cmd_coverage()
+
+    if lower == "/health":
+        rows = db_execute("SELECT status, COUNT(*) FROM source_health GROUP BY status", fetch=True)
+        if not rows: return "No health data yet. Run /scan first."
+        n = (db_execute("SELECT COUNT(*) FROM sources WHERE active=1", fetch=True) or [[0]])[0][0]
+        return f"Source health ({n} active):\n" + "\n".join(f"  {s}: {c}" for s, c in rows)
+
+    if lower == "/dead":
+        return _cmd_dead()
+
     if lower.startswith("/disablesource "):
-        name = clean_text(text[len("/disablesource "):]).strip()
-        rows = db_execute("SELECT id, name, company FROM sources WHERE active=1", fetch=True) or []
+        name    = clean_text(text[len("/disablesource "):]).strip()
+        rows    = db_execute("SELECT id, name, company FROM sources WHERE active=1", fetch=True) or []
         matches = [r for r in rows if name.lower() in r[1].lower() or name.lower() in r[2].lower()]
         if not matches:
             return f"No active source matching '{name}'. Use /sources to list."
         for sid, sname, scompany in matches:
             db_execute("UPDATE sources SET active=0 WHERE id=?", (sid,))
-        names = ", ".join(f"{r[1]} ({r[2]})" for r in matches)
-        return f"Disabled: {names}"
+        return f"Disabled: {', '.join(f'{r[1]} ({r[2]})' for r in matches)}"
 
     if lower.startswith("/enablesource "):
-        name = clean_text(text[len("/enablesource "):]).strip()
-        rows = db_execute("SELECT id, name, company FROM sources WHERE active=0", fetch=True) or []
+        name    = clean_text(text[len("/enablesource "):]).strip()
+        rows    = db_execute("SELECT id, name, company FROM sources WHERE active=0", fetch=True) or []
         matches = [r for r in rows if name.lower() in r[1].lower() or name.lower() in r[2].lower()]
         if not matches:
             return f"No disabled source matching '{name}'."
         for sid, sname, scompany in matches:
             db_execute("UPDATE sources SET active=1 WHERE id=?", (sid,))
-        names = ", ".join(f"{r[1]} ({r[2]})" for r in matches)
-        return f"Enabled: {names}"
+        return f"Enabled: {', '.join(f'{r[1]} ({r[2]})' for r in matches)}"
+
+    if lower == "/discoveries":
+        return format_discoveries()
+
+    if lower.startswith("/approve_source "):
+        raw_id = clean_text(text[len("/approve_source "):])
+        if not raw_id.isdigit(): return "Use: /approve_source <id>"
+        ok, msg = approve_discovery(int(raw_id))
+        return ("OK: " + msg) if ok else ("Error: " + msg)
+
+    if lower.startswith("/reject_source "):
+        raw_id = clean_text(text[len("/reject_source "):])
+        if not raw_id.isdigit(): return "Use: /reject_source <id>"
+        ok, msg = reject_discovery(int(raw_id))
+        return ("OK: " + msg) if ok else ("Error: " + msg)
+
+    # ── Maintenance ──
+    if lower == "/reseed":
+        seed_defaults()
+        return f"Reseeded. Keywords: {len(get_keywords())}, Excludes: {len(get_excludes())}"
+
+    if lower == "/fixsources":
+        fixed = []
+        for s in DEFAULT_SOURCES:
+            rows = db_execute("SELECT type FROM sources WHERE name=?", (s["name"],), fetch=True)
+            if rows and rows[0][0] != s["type"]:
+                db_execute("UPDATE sources SET type=? WHERE name=?", (s["type"], s["name"]))
+                fixed.append(f"{s['name']}: {rows[0][0]} -> {s['type']}")
+        return ("Fixed source types:\n" + "\n".join(fixed)) if fixed else "All source types already up to date."
+
+    if lower == "/weekly":
+        threading.Thread(target=send_weekly_digest, daemon=True).start()
+        return "📊 Sending weekly digest..."
+
+    # ── Scan ──
+    if lower in {"/scan", "/scandebug"}:
+        debug = (lower == "/scandebug")
+        def _run():
+            if not _scan_lock.acquire(blocking=False):
+                send_telegram_message("⏳ A scan is already running — please wait.")
+                return
+            try:
+                run_scan(silent=False, debug=debug)
+            except Exception as e:
+                import traceback
+                send_telegram_message(f"Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
+            finally:
+                _scan_lock.release()
+        threading.Thread(target=_run, daemon=True).start()
+        return "Scan started -- results on the way."
 
     return "Unknown command. Use /help."
-
-# ── Background threads ─────────────────────────────────────────────────────────
 
 # ── Job interactions ───────────────────────────────────────────────────────────
 
@@ -2427,7 +2253,6 @@ def explain_role(title: str) -> str:
     for key, explanation in ROLE_EXPLANATIONS.items():
         if key in low:
             return explanation
-    # Generic fallback
     return (
         f"{title.title()}\n\n"
         "This role is part of the production team at a VFX or animation studio.\n\n"
@@ -2439,11 +2264,10 @@ def explain_role(title: str) -> str:
     )
 
 def handle_callback(callback_query: dict, chat_id: str):
-    data = callback_query.get("data", "")
+    data  = callback_query.get("data", "")
     cb_id = callback_query.get("id", "")
     answer_callback(cb_id)
 
-    # Inline menu buttons trigger commands
     if data.startswith("/"):
         reply = handle_command(data)
         if reply:
@@ -2453,20 +2277,17 @@ def handle_callback(callback_query: dict, chat_id: str):
         return
 
     if data.startswith("applied::"):
-        unique_key = data[len("applied::"):]
-        mark_job_interaction(unique_key, "applied")
+        mark_job_interaction(data[len("applied::"):], "applied")
         send_telegram_message("📌 Marked as applied. Good luck!", chat_id=chat_id)
         return
 
     if data.startswith("ignore::"):
-        unique_key = data[len("ignore::"):]
-        mark_job_interaction(unique_key, "ignored")
+        mark_job_interaction(data[len("ignore::"):], "ignored")
         send_telegram_message("Got it. I'll note that.", chat_id=chat_id)
         return
 
     if data.startswith("explain::"):
-        title = data[len("explain::"):]
-        send_telegram_message(explain_role(title), chat_id=chat_id)
+        send_telegram_message(explain_role(data[len("explain::"):]), chat_id=chat_id)
         return
 
     if data.startswith("location::"):
@@ -2476,9 +2297,9 @@ def handle_callback(callback_query: dict, chat_id: str):
             f"📍 Location set to {mode}.\n\nWhat kinds of opportunities should I highlight?",
             chat_id=chat_id,
             buttons=[[
-                {"text": "🎯 Direct roles only",          "callback_data": "opptype::direct"},
-                {"text": "🎓 Programmes only",            "callback_data": "opptype::programme"},
-                {"text": "Both",                          "callback_data": "opptype::both"},
+                {"text": "🎯 Direct roles only",  "callback_data": "opptype::direct"},
+                {"text": "🎓 Programmes only",    "callback_data": "opptype::programme"},
+                {"text": "Both",                  "callback_data": "opptype::both"},
             ]],
         )
         return
@@ -2497,15 +2318,14 @@ def handle_callback(callback_query: dict, chat_id: str):
         return
 
     if data.startswith("interval::"):
-        # Can't change env var at runtime, but store preference
         set_state("scan_interval_pref", data[len("interval::"):])
         send_telegram_message(
             "You're all set.\n\nI'll monitor studios and send alerts when relevant opportunities appear.",
             chat_id=chat_id,
             buttons=[
-                [{"text": "🚀 Scan now",      "callback_data": "/scan"},
-                 {"text": "🗂 View saved jobs", "callback_data": "/jobs"}],
-                [{"text": "⚙️ Settings",       "callback_data": "/status"}],
+                [{"text": "🚀 Scan now",        "callback_data": "/scan"},
+                 {"text": "🗂 View saved jobs",  "callback_data": "/jobs"}],
+                [{"text": "⚙️ Settings",         "callback_data": "/status"}],
             ],
         )
         return
@@ -2518,7 +2338,6 @@ def command_loop():
             for update in updates:
                 offset  = update["update_id"] + 1
 
-                # Handle inline button callbacks
                 if "callback_query" in update:
                     cq      = update["callback_query"]
                     chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
@@ -2537,30 +2356,26 @@ def command_loop():
 
                 lower = text.strip().lower()
 
-                # Onboarding flow for /start
                 if lower == "/start":
                     send_telegram_message(
                         "🎬 VFX Job Monitor\n\n"
                         "This bot watches VFX, animation and post-production studios and alerts you "
                         "when entry-level production roles appear.\n\n"
                         "It scans studios automatically and highlights the strongest opportunities.\n\n"
-                        "Let's set it up quickly.\n\n"
-                        "Where should I focus?",
+                        "Let's set it up quickly.\n\nWhere should I focus?",
                         chat_id=chat_id,
                         buttons=[[
-                            {"text": "📍 London only",      "callback_data": "location::london"},
-                            {"text": "🇬🇧 Anywhere in UK",  "callback_data": "location::uk"},
-                            {"text": "🌍 Anywhere",         "callback_data": "location::off"},
+                            {"text": "📍 London only",     "callback_data": "location::london"},
+                            {"text": "🇬🇧 Anywhere in UK", "callback_data": "location::uk"},
+                            {"text": "🌍 Anywhere",        "callback_data": "location::off"},
                         ]],
                     )
                     continue
 
-                # /menu always shows the main nav
                 if lower == "/menu":
                     send_menu(chat_id=chat_id)
                     continue
 
-                # /applied shows tracked applications
                 if lower == "/applied":
                     rows = get_applied_jobs()
                     if not rows:
@@ -2579,7 +2394,6 @@ def command_loop():
 
                 reply = handle_command(text)
                 if reply:
-                    # Add menu buttons after help and status
                     btns = main_menu_buttons() if lower in {"/help", "/howto", "/status"} else None
                     send_telegram_message(reply, chat_id=chat_id, buttons=btns)
         except Exception:
@@ -2587,16 +2401,15 @@ def command_loop():
         time.sleep(3)
 
 def send_weekly_digest():
+    from collections import Counter
     cutoff_week = (utc_now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    # Jobs found this week
     week_rows = db_execute(
         """SELECT title, company, opportunity_type, score
            FROM jobs WHERE first_seen >= ? ORDER BY score DESC""",
         (cutoff_week,), fetch=True,
     ) or []
 
-    direct_jobs  = [r for r in week_rows if r[2] != "programme"]
+    direct_jobs    = [r for r in week_rows if r[2] != "programme"]
     programme_jobs = [r for r in week_rows if r[2] == "programme"]
 
     if not week_rows:
@@ -2607,29 +2420,24 @@ def send_weekly_digest():
         )
         return
 
-    # Most active studio
-    from collections import Counter
     studio_counts = Counter(r[1] for r in week_rows)
     top_studio    = studio_counts.most_common(1)[0][0] if studio_counts else "Unknown"
 
     lines = [
         "📊 Weekly hiring signal\n",
-        f"Across monitored studios this week:\n",
+        "Across monitored studios this week:\n",
         f"  {len(direct_jobs)} production role{'s' if len(direct_jobs) != 1 else ''} appeared",
         f"  {len(programme_jobs)} internship / programme signal{'s' if len(programme_jobs) != 1 else ''}",
         f"  Most active studio: {top_studio}\n",
     ]
-
     if direct_jobs:
         lines.append("Top roles this week:")
         for title, company, _, score in direct_jobs[:5]:
             lines.append(f"  🎯 {title} -- {company}")
-
     if programme_jobs:
         lines.append("\nProgrammes:")
         for title, company, _, score in programme_jobs[:3]:
             lines.append(f"  🎓 {title} -- {company}")
-
     lines.append("\nRun 🚀 /scan to check for anything new right now.")
     send_telegram_message("\n".join(lines))
 
@@ -2640,20 +2448,19 @@ def monitor_loop():
             if get_state("paused", "0") != "1":
                 if _scan_lock.acquire(blocking=False):
                     try:
-                        new_jobs = collect_and_store_jobs()
+                        new_jobs = run_scan(silent=True)
                         set_state("last_match_count", str(len(new_jobs)))
                         set_state("last_checked", now_str())
                         if new_jobs: send_new_job_alerts(new_jobs)
                     finally:
                         _scan_lock.release()
                 else:
-                    set_state("last_checked", now_str())  # manual scan in progress
+                    set_state("last_checked", now_str())
             else:
                 set_state("last_checked", now_str())
                 set_state("last_match_count", "0")
 
-            # Weekly digest — send on Monday mornings (weekday 0), once per day
-            now = utc_now()
+            now   = utc_now()
             today = now.date()
             if now.weekday() == 0 and 8 <= now.hour < 9 and last_digest_day != today:
                 last_digest_day = today
@@ -2665,8 +2472,7 @@ def monitor_loop():
             set_state("last_checked", now_str())
         time.sleep(CHECK_INTERVAL_SECONDS)
 
-# ── Flask ──────────────────────────────────────────────────────────────────────────────
-# ── Web UI helpers ─────────────────────────────────────────────────────────────
+# ── Web UI ─────────────────────────────────────────────────────────────────────
 
 _CSS = (
     "* { box-sizing: border-box; margin: 0; padding: 0; }\n"
@@ -2753,7 +2559,6 @@ _CSS = (
     "\n"
 )
 
-
 def _nav(active=""):
     links = [("Home", "/"), ("Jobs", "/jobs"), ("Saved", "/saved"),
              ("Applied", "/applied"), ("Coverage", "/coverage")]
@@ -2795,7 +2600,7 @@ def _job_card(row, actions=True, back_url="/jobs"):
     type_lbl  = "Programme" if is_prog else "Direct role"
     score_int = int(score or 0)
     date_str  = (first_seen or "")[:10]
-    new_badge = '<span class="badge badge-new">New today</span>' if _is_new(first_seen or "") else ""
+    new_badge   = '<span class="badge badge-new">New today</span>' if _is_new(first_seen or "") else ""
     score_badge = f'<span class="badge badge-score">Score {score_int}</span>'
     action_html = ""
     if actions:
@@ -2819,25 +2624,24 @@ def _job_card(row, actions=True, back_url="/jobs"):
     )
 
 def _score_explanation(bd_json):
-    import json as _json
     try:
-        bd = _json.loads(bd_json) if bd_json else {}
+        bd = json.loads(bd_json) if bd_json else {}
     except Exception:
         bd = {}
     if not bd:
         return '<p class="empty">No score data available.</p>'
     labels = {
-        "title_strength":      ("Title match",         "How well the job title matches production keywords"),
-        "juniority":           ("Entry-level signals",  "Words like junior, assistant, graduate, intern"),
-        "location_confidence": ("Location match",       "London / UK location indicators"),
-        "source_quality":      ("Source quality",       "Tier of the studio or board"),
-        "ats_type":            ("ATS bonus",            "Trusted application system"),
-        "company_tier":        ("Preferred studio",     "Top-tier studio bonus"),
-        "negative_indicators": ("Senior role penalty",  "Words like senior, director, supervisor"),
+        "title_strength":      ("Title match",        "How well the job title matches production keywords"),
+        "juniority":           ("Entry-level signals", "Words like junior, assistant, graduate, intern"),
+        "location_confidence": ("Location match",      "London / UK location indicators"),
+        "source_quality":      ("Source quality",      "Tier of the studio or board"),
+        "ats_type":            ("ATS bonus",           "Trusted application system"),
+        "company_tier":        ("Preferred studio",    "Top-tier studio bonus"),
+        "negative_indicators": ("Senior role penalty", "Words like senior, director, supervisor"),
     }
     rows_html = ""
     for key, (label, desc) in labels.items():
-        pts = bd.get(key, 0)
+        pts  = bd.get(key, 0)
         cls  = "score-pos" if pts > 0 else ("score-neg" if pts < 0 else "score-zero")
         sign = "+" if pts > 0 else ""
         rows_html += (
@@ -2855,21 +2659,19 @@ def _score_explanation(bd_json):
         + '</div>'
     )
 
-# \u2500\u2500 Flask routes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# ── Flask routes ───────────────────────────────────────────────────────────────
 
 @app.route("/")
 def home():
-    from datetime import datetime as _dt2, timedelta
-    cutoff  = (_dt2.utcnow() - timedelta(hours=24)).isoformat()
-    total    = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
-    new_ct   = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND first_seen > ?",
-                           (cutoff,), fetch=True) or [[0]])[0][0]
-    saved_ct = (db_execute(
-        "SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='saved'",
-        fetch=True) or [[0]])[0][0]
-    applied_ct = (db_execute(
-        "SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='applied'",
-        fetch=True) or [[0]])[0][0]
+    from datetime import datetime as _dt2
+    cutoff     = (_dt2.utcnow() - timedelta(hours=24)).isoformat()
+    total      = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active'", fetch=True) or [[0]])[0][0]
+    new_ct     = (db_execute("SELECT COUNT(*) FROM jobs WHERE job_status='active' AND first_seen > ?",
+                             (cutoff,), fetch=True) or [[0]])[0][0]
+    saved_ct   = (db_execute("SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='saved'",
+                             fetch=True) or [[0]])[0][0]
+    applied_ct = (db_execute("SELECT COUNT(DISTINCT unique_key) FROM job_interactions WHERE action='applied'",
+                             fetch=True) or [[0]])[0][0]
     last = get_state("last_checked", "Never")
 
     new_rows = db_execute(
@@ -3067,10 +2869,10 @@ def coverage_page():
         fetch=True) or []
 
     def _friendly(status, evt):
-        if status == "healthy" and evt == "success_nonzero": return ("Working normally", "coverage-ok")
+        if status == "healthy" and evt == "success_nonzero": return ("Working normally",      "coverage-ok")
         if status in ("healthy", "suspect") and evt == "success_zero": return ("No jobs found recently", "coverage-warn")
-        if status == "degraded": return ("Needs attention", "coverage-warn")
-        if status == "dead": return ("Not responding", "coverage-dead")
+        if status == "degraded": return ("Needs attention",   "coverage-warn")
+        if status == "dead":     return ("Not responding",    "coverage-dead")
         return ("Not checked yet", "coverage-warn")
 
     items = ""
@@ -3095,7 +2897,6 @@ def coverage_page():
 @app.route("/health")
 def health_check():
     return {"status": "ok"}, 200
-
 
 # ── Startup ────────────────────────────────────────────────────────────────────
 
