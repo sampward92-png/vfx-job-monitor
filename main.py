@@ -1083,6 +1083,98 @@ def parse_html(source: dict):
     except requests.exceptions.HTTPError as e:
         raise RuntimeError(f"http_error:{e.response.status_code if e.response else '?'}")
 
+def enrich_from_detail_page(raw: dict, source: dict) -> dict:
+    """
+    Fetch the linked detail page and extract richer title/body text.
+    Returns an enriched copy of raw, or the original if fetch fails.
+    Only called for HTML sources on weak candidates (no_keyword).
+    """
+    url = raw.get("url", "")
+    if not url or not is_allowed_html_link(source, url):
+        return raw
+    # Don't re-fetch ATS pages — they have their own parsers
+    if identify_ats_type(url):
+        return raw
+    try:
+        html = fetch_text(url)
+        soup = BeautifulSoup(html, "html.parser")
+        enriched = dict(raw)
+
+        # 1. JSON-LD JobPosting — most reliable signal
+        jsonld_title = jsonld_body = jsonld_loc = ""
+        for tag in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(tag.string or "")
+                if isinstance(data, list):
+                    data = next((d for d in data if d.get("@type") == "JobPosting"), {})
+                if data.get("@type") == "JobPosting":
+                    jsonld_title = clean_text(data.get("title", ""))
+                    jsonld_body  = clean_text(data.get("description", ""))[:1500]
+                    loc_data     = data.get("jobLocation", {})
+                    if isinstance(loc_data, list): loc_data = loc_data[0] if loc_data else {}
+                    addr         = loc_data.get("address", {})
+                    jsonld_loc   = clean_text(
+                        addr.get("addressLocality", "") + " " + addr.get("addressRegion", "") +
+                        " " + addr.get("addressCountry", "")
+                    )
+            except Exception:
+                pass
+
+        # 2. <title> tag (often contains role name)
+        page_title = ""
+        if soup.title and soup.title.string:
+            page_title = clean_text(soup.title.string)
+            # Strip common site suffixes like " | Framestore Careers"
+            page_title = re.sub(r"\s*[|\-–]\s*.{3,40}$", "", page_title).strip()
+
+        # 3. First <h1>, then <h2>
+        h1 = clean_text(soup.find("h1").get_text(" ", strip=True)) if soup.find("h1") else ""
+        h2 = clean_text(soup.find("h2").get_text(" ", strip=True)) if soup.find("h2") else ""
+
+        # 4. Meta description
+        meta_desc = ""
+        meta = soup.find("meta", attrs={"name": "description"})
+        if meta:
+            meta_desc = clean_text(meta.get("content", ""))
+
+        # 5. Top visible text block (first 1000 chars of body text)
+        body_text = ""
+        main = soup.find("main") or soup.find("article") or soup.find("body")
+        if main:
+            body_text = clean_text(main.get_text(" ", strip=True))[:1200]
+
+        # Pick the best title: JSON-LD > h1 > page_title > h2 > original
+        def _title_score(t):
+            if not t: return -1
+            low = t.lower()
+            score = 0
+            if 6 <= len(t) <= 100: score += 10
+            if any(w in low for w in ["coordinator", "assistant", "producer", "runner",
+                                       "trainee", "intern", "manager", "director"]): score += 20
+            return score
+
+        candidates = [(jsonld_title, "jsonld"), (h1, "h1"), (page_title, "title"),
+                      (h2, "h2"), (raw.get("title", ""), "original")]
+        best_title = max(candidates, key=lambda x: _title_score(x[0]))[0] or raw.get("title", "")
+
+        # Compose enriched body — prioritise JSON-LD description, fallback to body text
+        enriched_body = " ".join(filter(None, [
+            jsonld_body or body_text,
+            meta_desc,
+            jsonld_loc,
+            raw.get("body", ""),
+        ]))[:2000]
+
+        enriched["title"]    = best_title
+        enriched["body"]     = enriched_body
+        if jsonld_loc:
+            enriched["location"] = jsonld_loc
+        enriched["_enriched"] = True
+        return enriched
+
+    except Exception:
+        return raw
+
 def parse_greenhouse(source: dict):
     try:
         m = re.search(r"(?:boards|job-boards).greenhouse.io/([^/?#]+)", source["url"])
@@ -1223,6 +1315,34 @@ def collect_and_store_jobs(force: bool = False) -> list:
             raw_jobs, discovered = fetch_source_jobs(source)
             save_discovered_sources(source, discovered)
             record_source_success(source["name"], len(raw_jobs))
+
+            # Detail-page fallback: for HTML sources, attempt enrichment on weak candidates
+            # (those failing no_keyword) up to MAX_ENRICHMENTS per source
+            if source.get("type") == "html":
+                MAX_ENRICHMENTS = 5
+                enriched_count  = 0
+                enriched_jobs   = []
+                for raw in raw_jobs:
+                    if enriched_count >= MAX_ENRICHMENTS:
+                        enriched_jobs.append(raw)
+                        continue
+                    # Quick pre-check: only enrich if title looks weak/generic
+                    title_hay = normalize_text(f"{raw.get('title','')} {raw.get('url','')}")
+                    if any(ex in title_hay for ex in get_excludes()):
+                        enriched_jobs.append(raw)
+                        continue
+                    full_hay = normalize_text(f"{raw.get('title','')} {raw.get('body','')}")
+                    kw_match = next((kw for kw in get_keywords() if kw in full_hay), None)
+                    if kw_match:
+                        enriched_jobs.append(raw)  # already good, no need to enrich
+                        continue
+                    # Candidate failed keyword match — try fetching its detail page
+                    enriched = enrich_from_detail_page(raw, source)
+                    if enriched.get("_enriched"):
+                        enriched_count += 1
+                    enriched_jobs.append(enriched)
+                raw_jobs = enriched_jobs
+
             return source, raw_jobs, None
         except Exception as e:
             err    = str(e)
@@ -1280,11 +1400,20 @@ def send_telegram_message(text, chat_id=None, buttons=None):
         }
         if buttons:
             payload["reply_markup"] = {"inline_keyboard": buttons}
-        requests.post(
+        resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json=payload,
             timeout=20,
         )
+        # Telegram returns 400 when inline button URLs are malformed.
+        # Retry without buttons so the message still delivers.
+        if not resp.ok and buttons:
+            payload.pop("reply_markup", None)
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json=payload,
+                timeout=20,
+            )
     except Exception:
         pass
 
@@ -1362,14 +1491,16 @@ def format_job_alert(job: CanonicalJob) -> str:
     return "\n".join(lines)
 
 def send_job_alert(job: CanonicalJob, chat_id=None):
-    text    = format_job_alert(job)
+    text = format_job_alert(job)
     buttons = None
-    if job.apply_url:
+    url = (job.apply_url or "").strip()
+    # Telegram URL buttons require absolute http/https -- skip if relative or missing
+    if url.startswith(("http://", "https://")):
         unique_key = build_unique_key(job)
         buttons = [
-            [{"text": "🔗 Open job", "url": job.apply_url}],
+            [{"text": "🔗 Open job", "url": url}],
             [{"text": "📌 Mark as applied", "callback_data": f"applied::{unique_key}"},
-             {"text": "🚫 Ignore",           "callback_data": f"ignore::{unique_key}"}],
+             {"text": "🚫 Ignore",          "callback_data": f"ignore::{unique_key}"}],
             [{"text": "🧠 Explain this role", "callback_data": f"explain::{normalize_text(job.title)[:60]}"}],
         ]
     send_telegram_message(text, chat_id=chat_id, buttons=buttons)
