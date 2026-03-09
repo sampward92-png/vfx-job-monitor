@@ -348,22 +348,27 @@ def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
 
 # ── Database ───────────────────────────────────────────────────────────────────
 
+_db_lock = threading.Lock()
+
 def db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=10000")
     return conn
 
 def db_execute(query, params=(), fetch=False):
-    conn = db()
-    cur  = conn.cursor()
-    cur.execute(query, params)
-    rows = cur.fetchall() if fetch else None
-    conn.commit()
-    conn.close()
-    return rows
+    with _db_lock:
+        conn = db()
+        try:
+            cur  = conn.cursor()
+            cur.execute(query, params)
+            rows = cur.fetchall() if fetch else None
+            conn.commit()
+            return rows
+        finally:
+            conn.close()
 
 def init_db():
     conn = db()
