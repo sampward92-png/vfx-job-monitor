@@ -1994,11 +1994,6 @@ def handle_command(text: str) -> str:
                             source = futures[future]
                             source_log.append((source["name"], 0, 0, str(e)[:120], {}))
                             continue
-                    # Any futures not yet completed (outer timeout) → mark as timeout
-                    for future, source in futures.items():
-                        if not future.done():
-                            record_source_failure(source["name"], "timeout", "timeout")
-                            source_log.append((source["name"], 0, 0, "timeout", {}))
 
                         if err:
                             source_log.append((source["name"], 0, 0, err, {}))
@@ -2014,8 +2009,6 @@ def handle_command(text: str) -> str:
                             if reason != "passed":
                                 reason_counts[reason] += 1
                                 continue
-                            # classify_rejection already validated keyword match;
-                            # call again to get the matched keyword string
                             _, matched_keyword = title_keyword_match(job)
                             job.matched_keyword = matched_keyword
                             total_score, breakdown = score_job(job)
@@ -2025,14 +2018,18 @@ def handle_command(text: str) -> str:
                             with lock:
                                 created, unique_key = upsert_job(job)
                                 seen_keys.add(unique_key)
-                                # Only notify if job is new OR this is a forced re-scan
-                                # and the job hasn't been notified this session already
                                 if unique_key not in emitted_keys:
                                     emitted_keys.add(unique_key)
                                     if created or debug:
                                         all_matched.append(job)
                             matched_this += 1
                         source_log.append((source["name"], len(raw_jobs), matched_this, None, reason_counts))
+
+                    # Any futures not yet completed (outer timeout) → mark as timeout
+                    for future, source in futures.items():
+                        if not future.done():
+                            record_source_failure(source["name"], "timeout", "timeout")
+                            source_log.append((source["name"], 0, 0, "timeout", {}))
 
                 expire_stale_jobs(seen_keys)
                 all_matched.sort(key=lambda j: j.score or 0, reverse=True)
