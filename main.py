@@ -351,7 +351,8 @@ def normalise_to_canonical(raw: dict, source: dict) -> CanonicalJob:
 
 # ── Database ───────────────────────────────────────────────────────────────────
 
-_db_lock = threading.Lock()
+_db_lock  = threading.Lock()
+_scan_lock = threading.Lock()  # prevents concurrent scans
 
 def db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
@@ -1284,8 +1285,8 @@ def parse_greenhouse(source: dict):
                      "url": i.get("absolute_url", ""), "body": json.dumps(i),
                      "external_id": str(i.get("id", "")), "ats_type": "greenhouse"}
                     for i in data.get("jobs", [])], []
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_greenhouse error: {type(_e).__name__}: {_e}")
     return parse_html(source)
 
 def parse_lever(source: dict):
@@ -1299,8 +1300,8 @@ def parse_lever(source: dict):
                      "external_id": i.get("id", ""), "ats_type": "lever",
                      "posted_at": str(i.get("createdAt", ""))}
                     for i in data], []
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_lever error: {type(_e).__name__}: {_e}")
     return parse_html(source)
 
 def parse_workable(source: dict):
@@ -1323,8 +1324,8 @@ def parse_workable(source: dict):
                      "external_id": i.get("shortcode", ""),
                      "ats_type": "workable"}
                     for i in results], []
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_workable error: {type(_e).__name__}: {_e}")
     return parse_html(source)
 def parse_ashby(source):           return parse_html(source)
 def parse_jobvite(source: dict):
@@ -1365,8 +1366,8 @@ def parse_jobvite(source: dict):
             })
         if out:
             return out, []
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_jobvite error: {type(_e).__name__}: {_e}")
     return parse_html(source)
 def parse_teamtailor(source: dict):
     """Teamtailor public JSON endpoint: GET {subdomain}.teamtailor.com/jobs.json"""
@@ -1400,8 +1401,8 @@ def parse_teamtailor(source: dict):
             })
         if out:
             return out, []
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging as _log; _log.warning(f"parse_teamtailor error: {type(_e).__name__}: {_e}")
     return parse_html(source)
 def parse_smartrecruiters(source): return parse_html(source)
 def parse_workday(source):         return parse_html(source)
@@ -1822,6 +1823,9 @@ def handle_command(text: str) -> str:
         debug = (lower == "/scandebug")
 
         def _run_scan():
+            if not _scan_lock.acquire(blocking=False):
+                send_telegram_message("⏳ A scan is already running — please wait.")
+                return
             try:
                 sources   = get_active_sources()
                 threshold = quality_threshold()
@@ -1843,7 +1847,8 @@ def handle_command(text: str) -> str:
                         record_source_success(source["name"], len(raw_jobs))
                         return source, raw_jobs, discovered, None
                     except Exception as e:
-                        err = str(e)[:120]
+                        import traceback as _tb
+                        err = f"{type(e).__name__}: {str(e)[:100]}"
                         record_source_failure(source["name"], err, "parse_error")
                         return source, [], [], err
 
@@ -1975,6 +1980,8 @@ def handle_command(text: str) -> str:
             except Exception as e:
                 import traceback
                 send_telegram_message(f"Scan crashed: {str(e)[:300]}\n{traceback.format_exc()[:500]}")
+            finally:
+                _scan_lock.release()
 
         threading.Thread(target=_run_scan, daemon=True).start()
         return "Scan started -- results on the way."
@@ -2500,10 +2507,16 @@ def monitor_loop():
     while True:
         try:
             if get_state("paused", "0") != "1":
-                new_jobs = collect_and_store_jobs()
-                set_state("last_match_count", str(len(new_jobs)))
-                set_state("last_checked", now_str())
-                if new_jobs: send_new_job_alerts(new_jobs)
+                if _scan_lock.acquire(blocking=False):
+                    try:
+                        new_jobs = collect_and_store_jobs()
+                        set_state("last_match_count", str(len(new_jobs)))
+                        set_state("last_checked", now_str())
+                        if new_jobs: send_new_job_alerts(new_jobs)
+                    finally:
+                        _scan_lock.release()
+                else:
+                    set_state("last_checked", now_str())  # manual scan in progress
             else:
                 set_state("last_checked", now_str())
                 set_state("last_match_count", "0")
