@@ -1809,9 +1809,13 @@ def handle_command(text: str) -> str:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     futures = {executor.submit(_scrape_one, s): s for s in sources}
-                    for future in concurrent.futures.as_completed(futures, timeout=60):
+                    try:
+                        completed_iter = concurrent.futures.as_completed(futures, timeout=120)
+                    except Exception:
+                        completed_iter = iter([])
+                    for future in completed_iter:
                         try:
-                            source, raw_jobs, discovered, err = future.result()
+                            source, raw_jobs, discovered, err = future.result(timeout=30)
                         except concurrent.futures.TimeoutError:
                             source = futures[future]
                             record_source_failure(source["name"], "timeout", "timeout")
@@ -1821,6 +1825,11 @@ def handle_command(text: str) -> str:
                             source = futures[future]
                             source_log.append((source["name"], 0, 0, str(e)[:120], {}))
                             continue
+                    # Any futures not yet completed (outer timeout) → mark as timeout
+                    for future, source in futures.items():
+                        if not future.done():
+                            record_source_failure(source["name"], "timeout", "timeout")
+                            source_log.append((source["name"], 0, 0, "timeout", {}))
 
                         if err:
                             source_log.append((source["name"], 0, 0, err, {}))
